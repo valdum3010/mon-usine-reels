@@ -47,7 +47,8 @@ def create_unique_text_sticker(text, reel_size, base_y):
     # On adapte la taille de la police à la largeur de la vidéo
     base_font_scale = canvas_w / 1080.0
     
-    # --- TAILLES GÉANTES SPÉCIAL OFM ---
+    # --- LES TAILLES GÉANTES SPÉCIAL OFM SONT ICI : ---
+    # Pour "2007", length < 15 -> Taille de base passe de 140 à 280
     font_size = int(280 * base_font_scale) if length < 15 else (int(190 * base_font_scale) if length < 50 else int(140 * base_font_scale))
     font_size += random.randint(-5, 5)
 
@@ -70,8 +71,9 @@ def create_unique_text_sticker(text, reel_size, base_y):
 
         for l in lines:
             w_t = pilmoji.getsize(l, font=font)[0]
-            # Stroke dynamique pour que le contour noir soit bien visible
+            # Stroke dynamique pour que le contour noir soit visible peu importe la taille
             stroke_w = max(1, int(5 * base_font_scale))
+            # On dessine le nouveau texte géant
             pilmoji.text(((canvas_w - w_t) // 2, start_y), l, font=font, 
                          fill="white", stroke_width=stroke_w, stroke_fill="black")
             start_y += font_size + 20
@@ -95,7 +97,7 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
 
     for i in range(n_to_make):
         
-        # 🛑 VÉRIFICATION DU BOUTON STOP
+        # 🛑 VÉRIFICATION DU BOUTON STOP AVANT CHAQUE NOUVEAU REEL
         if stop_event and stop_event.is_set():
             print("Arrêt de la production demandé par l'utilisateur.")
             break
@@ -115,16 +117,16 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         if i % 2 == 0:
             active_effects.append(vfx.MirrorX())
             
-        # Ajout furtif de la couleur (Variation légère pour brouiller l'IA)
+        # Ajout furtif de la couleur (Variation légère pour brouiller l'IA d'Insta)
         try:
             active_effects.append(vfx.Colorx(random.uniform(0.99, 1.01)))
         except:
-            pass 
+            pass # Si ça bloque sur certaines versions de MoviePy, on ignore
 
         if active_effects:
             video_reel = video_reel.with_effects(active_effects)
         
-        # 2. Recadrage à la dimension exacte de la vidéo d'origine 
+        # 2. Recadrage à la dimension exacte de la vidéo d'origine (Fini le zoom flou !)
         video_reel = video_reel.cropped(
             x_center=video_reel.w/2, 
             y_center=video_reel.h/2, 
@@ -137,8 +139,10 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         video_reel = video_reel.subclipped(0, video_reel.duration - cut_time)
 
         # Rendu du texte avec la vraie dimension de la vidéo
+        # C'est ici que le nouveau texte GÉANT est créé
         txt_img = create_unique_text_sticker(txt, (clip_base.w, clip_base.h), base_y)
         txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
+        # On superpose le nouveau texte GÉANT par-dessus la vidéo source
         final = CompositeVideoClip([video_reel, txt_clip])
         
         output_name = f"{modele_nom}_Reel_{i+1}_variant.mp4"
