@@ -14,32 +14,39 @@ from moviepy import VideoFileClip, ImageClip, CompositeVideoClip, vfx
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
 def get_base_y_placement(video_path, canvas_h):
+    # --- VRAIES MARGES DE SÉCURITÉ TIKTOK/REELS ---
+    safe_top = int(canvas_h * 0.22)    # 22% du haut (Juste sous les menus)
+    safe_bottom = int(canvas_h * 0.60) # 60% du haut (Juste au-dessus de la description)
+    
+    # Par défaut, on force dans la zone safe du BAS (car la tête est presque toujours en haut)
+    fallback_y = safe_bottom 
+
     try:
         cap = cv2.VideoCapture(video_path)
         ret, frame = cap.read()
         cap.release()
         
-        # --- MARGES DE SÉCURITÉ REELS / TIKTOK ---
-        # 20% du haut (évite les menus du haut)
-        default_top = int(canvas_h * 0.20)
-        # 65% du haut (laisse 35% de vide en bas pour éviter d'être caché par la description)
-        default_bottom = int(canvas_h * 0.65)
-        
-        if not ret: return default_top
+        if not ret: return fallback_y
         
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+        # Scanner de visage
+        faces = face_cascade.detectMultiScale(gray, 1.1, 3)
         
         if len(faces) > 0:
             (x, y, w, h) = faces[0]
             face_y = (y + h/2) * (canvas_h / frame.shape[0])
-            # Si le visage est dans la moitié haute, on met le texte en bas
+            
+            # Si le visage est dans la moitié haute, le texte va dans la zone safe du BAS
             if face_y < canvas_h * 0.5: 
-                return default_bottom 
+                return safe_bottom 
             else: 
-                return default_top 
+                return safe_top 
+                
+        # Si le scanner rate (visage tourné, etc.), on applique le fallback en bas
+        return fallback_y
+        
     except: pass
-    return int(canvas_h * 0.20) 
+    return fallback_y
 
 def create_unique_text_sticker(text, reel_size, base_y):
     canvas_w, canvas_h = reel_size
@@ -55,7 +62,7 @@ def create_unique_text_sticker(text, reel_size, base_y):
     font_size = int(110 * base_font_scale) if length < 15 else (int(80 * base_font_scale) if length < 50 else int(60 * base_font_scale))
     font_size += random.randint(-3, 3)
 
-    # On utilise bien ta police envoyée sur GitHub !
+    # 🚨 Pense bien à uploader IMPACT.TTF sur ton GitHub et à changer le nom ici si tu veux enlever l'italique !
     try: 
         font = ImageFont.truetype("ARIALNBI.TTF", font_size)
     except Exception as e: 
@@ -101,7 +108,7 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
 
     clip_base = VideoFileClip(chemin_video)
     
-    # 📏 Calcul du placement initial (esquive visage)
+    # 📏 Calcul du placement initial (esquive visage et zones safe)
     base_y = get_base_y_placement(chemin_video, clip_base.h)
     
     reels_reussis = 0
