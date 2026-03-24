@@ -11,6 +11,7 @@ from pilmoji.source import AppleEmojiSource
 warnings.filterwarnings("ignore")
 from moviepy import VideoFileClip, ImageClip, CompositeVideoClip, vfx
 
+# Chargement du "cerveau" pour scanner les visages
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
 def get_base_y_placement(video_path, canvas_h):
@@ -55,16 +56,16 @@ def create_unique_text_sticker(text, reel_size, base_y):
     final_y = base_y + random_y_offset
     length = len(text)
     
-    # On se base sur la largeur pour que le texte s'adapte parfaitement
+    # On se base sur la largeur pour que le texte s'adapte parfaitement à la résolution
     base_font_scale = canvas_w / 1080.0
 
-    # --- NOUVELLES TAILLES (Propres, lisibles, pas abusées) ---
+    # --- TAILLES OPTIMISÉES (Propres, lisibles, impactantes) ---
     font_size = int(110 * base_font_scale) if length < 15 else (int(80 * base_font_scale) if length < 50 else int(60 * base_font_scale))
     font_size += random.randint(-3, 3)
 
-    # 🚨 Pense bien à uploader IMPACT.TTF sur ton GitHub et à changer le nom ici si tu veux enlever l'italique !
+    # 🚨 ON UTILISE TA NOUVELLE POLICE ARIAL ROUNDED (Fini l'italique !) 🚨
     try: 
-        font = ImageFont.truetype("ARIALNBI.TTF", font_size)
+        font = ImageFont.truetype("arialrounded.ttf", font_size)
     except Exception as e: 
         print(f"Erreur police : {e}")
         font = ImageFont.load_default()
@@ -81,17 +82,17 @@ def create_unique_text_sticker(text, reel_size, base_y):
             else: lines.append(line); line = w
         lines.append(line)
         
-        # Contour noir proportionnel (plus fin pour un rendu plus propre)
+        # Contour noir proportionnel (Stroke épais pour un rendu propre sur tout fond)
         stroke_w = max(2, int(4 * base_font_scale))
         
-        # Espacement entre les lignes
+        # Espacement dynamique entre les lignes
         espacement = int(15 * base_font_scale)
         total_h = len(lines) * (font_size + espacement)
         start_y = final_y - (total_h // 2)
 
         for l in lines:
             w_t = pilmoji.getsize(l, font=font)[0]
-            # Dessin du texte au centre
+            # Dessin du texte parfaitement centré
             pilmoji.text(((canvas_w - w_t) // 2, start_y), l, font=font, 
                          fill="white", stroke_width=stroke_w, stroke_fill="black")
             start_y += font_size + espacement
@@ -108,12 +109,14 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
 
     clip_base = VideoFileClip(chemin_video)
     
-    # 📏 Calcul du placement initial (esquive visage et zones safe)
+    # 📏 Calcul du placement initial (Esquive visage + Zones Safe)
     base_y = get_base_y_placement(chemin_video, clip_base.h)
     
     reels_reussis = 0
 
     for i in range(n_to_make):
+        
+        # 🛑 VÉRIFICATION DU BOUTON STOP AVANT CHAQUE NOUVEAU REEL
         if stop_event and stop_event.is_set():
             print("Arrêt de la production demandé par l'utilisateur.")
             break
@@ -123,22 +126,23 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         if status_text:
             status_text.text(f"⚡ [{i+1}/{n_to_make}] Production de la variante : {txt[:20]}...")
 
-        # --- PACK ANTI-BAN ---
+        # --- PACK ANTI-BAN (Furtivité Maximale) ---
         zoom_factor = random.uniform(1.02, 1.04)
-        video_reel = clip_base.resized(zoom_factor)
+        video_reel = clip_base.resized(zoom_factor) # 1. Zoom imperceptible
         
         active_effects = []
         if i % 2 == 0:
-            active_effects.append(vfx.MirrorX())
+            active_effects.append(vfx.MirrorX()) # 2. Effet Miroir 1 fois sur 2
             
         try:
-            active_effects.append(vfx.Colorx(random.uniform(0.99, 1.01)))
+            active_effects.append(vfx.Colorx(random.uniform(0.99, 1.01))) # 3. Filtre couleur invisible
         except:
             pass 
 
         if active_effects:
             video_reel = video_reel.with_effects(active_effects)
         
+        # Recadrage à la dimension exacte pour éviter le flou de zoom
         video_reel = video_reel.cropped(
             x_center=video_reel.w/2, 
             y_center=video_reel.h/2, 
@@ -146,15 +150,20 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
             height=clip_base.h
         )
         
+        # 4. Coupe temporelle aléatoire à la fin de la vidéo
         cut_time = random.uniform(0.05, 0.25)
         video_reel = video_reel.subclipped(0, video_reel.duration - cut_time)
 
-        # Rendu du texte avec esquive de visage et marges de sécurité
+        # Rendu du texte avec esquive de visage, bonne police, et marges de sécurité
         txt_img = create_unique_text_sticker(txt, (clip_base.w, clip_base.h), base_y)
         txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
+        
+        # Superposition du texte sur la vidéo
         final = CompositeVideoClip([video_reel, txt_clip])
         
         output_name = f"{modele_nom}_Reel_{i+1}_variant.mp4"
+        
+        # 5. Nettoyage des Métadonnées + Ajout d'un ID unique par vidéo
         clean_params = ["-map_metadata", "-1", "-metadata", f"comment=Generation_ID_{random.randint(10000,99999)}"]
         
         final.write_videofile(os.path.join(dossier_sortie, output_name), 
