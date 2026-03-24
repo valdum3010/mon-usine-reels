@@ -46,7 +46,9 @@ def create_unique_text_sticker(text, reel_size, base_y):
     
     # On adapte la taille de la police à la largeur de la vidéo
     base_font_scale = canvas_w / 1080.0
-   font_size = int(280 * base_font_scale) if length < 15 else (int(190 * base_font_scale) if length < 50 else int(140 * base_font_scale))
+    
+    # --- TAILLES GÉANTES SPÉCIAL OFM ---
+    font_size = int(280 * base_font_scale) if length < 15 else (int(190 * base_font_scale) if length < 50 else int(140 * base_font_scale))
     font_size += random.randint(-5, 5)
 
     try: font = ImageFont.truetype("arial.ttf", font_size)
@@ -68,7 +70,7 @@ def create_unique_text_sticker(text, reel_size, base_y):
 
         for l in lines:
             w_t = pilmoji.getsize(l, font=font)[0]
-            # Stroke dynamique pour que le contour noir soit visible peu importe la taille
+            # Stroke dynamique pour que le contour noir soit bien visible
             stroke_w = max(1, int(5 * base_font_scale))
             pilmoji.text(((canvas_w - w_t) // 2, start_y), l, font=font, 
                          fill="white", stroke_width=stroke_w, stroke_fill="black")
@@ -103,7 +105,7 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         if status_text:
             status_text.text(f"⚡ [{i+1}/{n_to_make}] Production de la variante : {txt[:20]}...")
 
-        # --- PACK ANTI-BAN CORRIGÉ (Dynamique) ---
+        # --- PACK ANTI-BAN ---
         zoom_factor = random.uniform(1.02, 1.04)
         
         # 1. Zoom proportionnel (ça ne déforme plus rien)
@@ -113,16 +115,16 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         if i % 2 == 0:
             active_effects.append(vfx.MirrorX())
             
-        # Ajout furtif de la couleur (Variation très légère pour brouiller l'IA d'Insta)
+        # Ajout furtif de la couleur (Variation légère pour brouiller l'IA)
         try:
             active_effects.append(vfx.Colorx(random.uniform(0.99, 1.01)))
         except:
-            pass # Si ça bloque sur certaines versions de MoviePy, on ignore
+            pass 
 
         if active_effects:
             video_reel = video_reel.with_effects(active_effects)
         
-        # 2. Recadrage à la dimension exacte de la vidéo d'origine (Fini le zoom extrême !)
+        # 2. Recadrage à la dimension exacte de la vidéo d'origine 
         video_reel = video_reel.cropped(
             x_center=video_reel.w/2, 
             y_center=video_reel.h/2, 
