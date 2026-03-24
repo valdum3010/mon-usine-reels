@@ -45,32 +45,22 @@ def create_unique_text_sticker(text, reel_size, base_y):
     final_y = base_y + random_y_offset
     length = len(text)
     
-    # --- CALCUL MASTER FORCE BRUTE V3 ( Absolute Pixel-driven ) ---
-    # On définit des bases de police en pixels ÉNORMES pour de l'impact OFM
-
-    # 📏 Calcul OFM Géant relatif à une hauteur type de 1920px vertical
-    # (Si la vidéo est 1080x1920, scale = 1.0)
-    # (Si la vidéo est 360x640, scale = 0.33 -> On compense par des bases ÉNORMES)
-    
+    # --- CALCUL MASTER FORCE BRUTE V3 (Pixels Absolus) ---
     scale_factor = canvas_h / 1920.0
 
-    # 📏 LES NOUVELLES BASES MASTER FORCE BRUTE GÉANTES (pixels)
-    # Court ("2007") -> Taille OFM passe à 500 pixels réels sur 1920h ( ~26% hauteur écran )
-    # Med (Phrase) -> 350 pixels réels ( ~18% hauteur )
-    # Long (Para) -> 250 pixels réels ( ~13% hauteur )
-    
-    # 📏 Calcul du font_size Master Force V3 Brute
+    # 📏 Calcul du font_size GÉANT
     font_size = int(500 * scale_factor) if length < 15 else (int(350 * scale_factor) if length < 50 else int(250 * scale_factor))
 
-    # On assure un taille minimale absolue pour éviter les textes microscopiques
-    # MAIS PAS DE MULTIPLICATION PAR base_ofm_scale. ON VEUT DU BRUT.
+    # On assure une taille minimale absolue pour éviter les textes microscopiques
     font_size = max(150, font_size)
-
-    # 📏 Variation aléatoire légèrement augmentée (Anti-ban)
     font_size += random.randint(-10, 10)
 
-    try: font = ImageFont.truetype("arial.ttf", font_size)
-    except: font = ImageFont.load_default()
+    # 🚨 LA CORRECTION MAGIQUE EST ICI (ARIALNBI.TTF en majuscules !) 🚨
+    try: 
+        font = ImageFont.truetype("ARIALNBI.TTF", font_size)
+    except Exception as e: 
+        print(f"Erreur police : {e}")
+        font = ImageFont.load_default()
 
     with Pilmoji(img, source=AppleEmojiSource) as pilmoji:
         lines = []
@@ -84,9 +74,8 @@ def create_unique_text_sticker(text, reel_size, base_y):
             else: lines.append(line); line = w
         lines.append(line)
         
-        # Stroke dynamique renforcé pour OFM ( visible sur blanc/noir )
+        # Stroke (contour noir) dynamique renforcé
         scale_factor_stroke = canvas_h / 1920.0
-        # On utilise scale_factor pour le stroke aussi, pour qu'il suive la taille géante
         stroke_w = max(2, int(8 * scale_factor_stroke))
 
         total_h = len(lines) * (font_size + 20)
@@ -131,14 +120,13 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         # --- PACK ANTI-BAN ---
         zoom_factor = random.uniform(1.02, 1.04)
         
-        # 1. Zoom proportionnel (ça ne déforme plus rien)
+        # 1. Zoom proportionnel
         video_reel = clip_base.resized(zoom_factor)
         
         active_effects = []
         if i % 2 == 0:
             active_effects.append(vfx.MirrorX())
             
-        # Ajout furtif de la couleur (Variation très légère pour brouiller l'IA d'Insta)
         try:
             active_effects.append(vfx.Colorx(random.uniform(0.99, 1.01)))
         except:
@@ -147,7 +135,7 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         if active_effects:
             video_reel = video_reel.with_effects(active_effects)
         
-        # 2. Recadrage à la dimension exacte de la vidéo d'origine (Fini le zoom flou !)
+        # 2. Recadrage à la dimension exacte de la vidéo d'origine
         video_reel = video_reel.cropped(
             x_center=video_reel.w/2, 
             y_center=video_reel.h/2, 
@@ -160,10 +148,8 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         video_reel = video_reel.subclipped(0, video_reel.duration - cut_time)
 
         # Rendu du texte avec la vraie dimension de la vidéo
-        # C'est ici que le nouveau texte MASTER FORCE GÉANT est créé
         txt_img = create_unique_text_sticker(txt, (clip_base.w, clip_base.h), base_y)
         txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
-        # On superpose le nouveau texte GÉANT par-dessus la vidéo source
         final = CompositeVideoClip([video_reel, txt_clip])
         
         output_name = f"{modele_nom}_Reel_{i+1}_variant.mp4"
