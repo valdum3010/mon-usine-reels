@@ -40,30 +40,42 @@ def get_base_y_placement(video_path, canvas_h):
 def create_unique_text_sticker(text, reel_size, base_y):
     canvas_w, canvas_h = reel_size
     img = Image.new('RGBA', reel_size, (0, 0, 0, 0))
-    # Réduction de l'offset aléatoire pour OFM plus propre
-    random_y_offset = random.randint(-20, 20)
+    # Réduction radicale de l'offset aléatoire pour OFM ultra-propre
+    random_y_offset = random.randint(-10, 10)
     final_y = base_y + random_y_offset
     length = len(text)
     
-    # --- CALCUL Master Force OFM ---
-    # On cale la police sur la hauteur (1920px type), c'est plus stable
-    # et on force une taille de base OFM MASSIVE
-    
-    # 📏 Calcul OFM Géant relatif à une hauteur type de 1920px vertical
-    scale_factor = canvas_h / 1920.0
-    # On assure une échelle minimale pour les basses résolutions
-    base_ofm_scale = max(0.5, scale_factor)
+    # --- CALCUL MASTER FORCE BRUTE V3 ( Absolute Pixel-driven ) ---
+    # On définit des bases de police en pixels ÉNORMES pour de l'impact OFM
 
-    # 📏 LES NOUVELLES BASES Master Force OFM (Pour un Reels de 1920h)
-    font_size = int(300 * base_ofm_scale) if length < 15 else (int(200 * base_ofm_scale) if length < 50 else int(150 * base_ofm_scale))
-    font_size += random.randint(-5, 5)
+    # 📏 Calcul OFM Géant relatif à une hauteur type de 1920px vertical
+    # (Si la vidéo est 1080x1920, scale = 1.0)
+    # (Si la vidéo est 360x640, scale = 0.33 -> On compense par des bases ÉNORMES)
+    
+    scale_factor = canvas_h / 1920.0
+
+    # 📏 LES NOUVELLES BASES MASTER FORCE BRUTE GÉANTES (pixels)
+    # Court ("2007") -> Taille OFM passe à 500 pixels réels sur 1920h ( ~26% hauteur écran )
+    # Med (Phrase) -> 350 pixels réels ( ~18% hauteur )
+    # Long (Para) -> 250 pixels réels ( ~13% hauteur )
+    
+    # 📏 Calcul du font_size Master Force V3 Brute
+    font_size = int(500 * scale_factor) if length < 15 else (int(350 * scale_factor) if length < 50 else int(250 * scale_factor))
+
+    # On assure un taille minimale absolue pour éviter les textes microscopiques
+    # MAIS PAS DE MULTIPLICATION PAR base_ofm_scale. ON VEUT DU BRUT.
+    font_size = max(150, font_size)
+
+    # 📏 Variation aléatoire légèrement augmentée (Anti-ban)
+    font_size += random.randint(-10, 10)
 
     try: font = ImageFont.truetype("arial.ttf", font_size)
     except: font = ImageFont.load_default()
 
     with Pilmoji(img, source=AppleEmojiSource) as pilmoji:
         lines = []
-        max_w = int(canvas_w * 0.9) # Plus de marge pour OFM
+        # Plus de marge sur les côtés pour OFM
+        max_w = int(canvas_w * 0.9)
         words = text.split()
         line = ""
         for w in words:
@@ -73,19 +85,23 @@ def create_unique_text_sticker(text, reel_size, base_y):
         lines.append(line)
         
         # Stroke dynamique renforcé pour OFM ( visible sur blanc/noir )
-        stroke_w = max(2, int(6 * base_ofm_scale))
+        scale_factor_stroke = canvas_h / 1920.0
+        # On utilise scale_factor pour le stroke aussi, pour qu'il suive la taille géante
+        stroke_w = max(2, int(8 * scale_factor_stroke))
+
         total_h = len(lines) * (font_size + 20)
         start_y = final_y - (total_h // 2)
 
         for l in lines:
             w_t = pilmoji.getsize(l, font=font)[0]
+            # On dessine le nouveau texte GÉANT avec le contour épais
             pilmoji.text(((canvas_w - w_t) // 2, start_y), l, font=font, 
                          fill="white", stroke_width=stroke_w, stroke_fill="black")
             start_y += font_size + 20
             
     return np.array(img)
 
-def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_make, modele_nom, stop_event=None):
+def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_make, modele_nom, progress_bar=None, status_text=None, stop_event=None):
     
     with open(chemin_captions, "r", encoding="utf-8") as f:
         all_captions = [c.strip() for c in f.read().split('\n\n') if c.strip()]
@@ -109,17 +125,20 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
 
         txt = all_captions[i % len(all_captions)]
         
-        # --- PACK ANTI-BAN CORRIGÉ ---
+        if status_text:
+            status_text.text(f"⚡ [{i+1}/{n_to_make}] Production de la variante : {txt[:20]}...")
+
+        # --- PACK ANTI-BAN ---
         zoom_factor = random.uniform(1.02, 1.04)
         
-        # 1. Zoom proportionnel (ça ne déforme plus rien, Turn 10)
+        # 1. Zoom proportionnel (ça ne déforme plus rien)
         video_reel = clip_base.resized(zoom_factor)
         
         active_effects = []
         if i % 2 == 0:
             active_effects.append(vfx.MirrorX())
             
-        # Ajout furtif de la couleur (Variation très légère pour brouiller l'IA d'Insta, Turn 11)
+        # Ajout furtif de la couleur (Variation très légère pour brouiller l'IA d'Insta)
         try:
             active_effects.append(vfx.Colorx(random.uniform(0.99, 1.01)))
         except:
@@ -128,7 +147,7 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         if active_effects:
             video_reel = video_reel.with_effects(active_effects)
         
-        # 2. Recadrage à la dimension exacte de la vidéo d'origine (Fini le zoom flou, Turn 10 !)
+        # 2. Recadrage à la dimension exacte de la vidéo d'origine (Fini le zoom flou !)
         video_reel = video_reel.cropped(
             x_center=video_reel.w/2, 
             y_center=video_reel.h/2, 
@@ -141,7 +160,7 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         video_reel = video_reel.subclipped(0, video_reel.duration - cut_time)
 
         # Rendu du texte avec la vraie dimension de la vidéo
-        # C'est ici que le nouveau texte Master Force GÉANT est créé
+        # C'est ici que le nouveau texte MASTER FORCE GÉANT est créé
         txt_img = create_unique_text_sticker(txt, (clip_base.w, clip_base.h), base_y)
         txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
         # On superpose le nouveau texte GÉANT par-dessus la vidéo source
@@ -156,4 +175,7 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         
         reels_reussis += 1
         
+        if progress_bar:
+            progress_bar.progress(reels_reussis / n_to_make)
+
     clip_base.close()
