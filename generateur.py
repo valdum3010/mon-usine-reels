@@ -40,16 +40,22 @@ def get_base_y_placement(video_path, canvas_h):
 def create_unique_text_sticker(text, reel_size, base_y):
     canvas_w, canvas_h = reel_size
     img = Image.new('RGBA', reel_size, (0, 0, 0, 0))
-    random_y_offset = random.randint(-40, 40)
+    # Réduction de l'offset aléatoire pour OFM plus propre
+    random_y_offset = random.randint(-20, 20)
     final_y = base_y + random_y_offset
     length = len(text)
     
-    # On adapte la taille de la police à la largeur de la vidéo
-    base_font_scale = canvas_w / 1080.0
+    # --- CALCUL Master Force OFM ---
+    # On cale la police sur la hauteur (1920px type), c'est plus stable
+    # et on force une taille de base OFM MASSIVE
     
-    # --- LES TAILLES GÉANTES SPÉCIAL OFM SONT ICI : ---
-    # Pour "2007", length < 15 -> Taille de base passe de 140 à 280
-    font_size = int(280 * base_font_scale) if length < 15 else (int(190 * base_font_scale) if length < 50 else int(140 * base_font_scale))
+    # 📏 Calcul OFM Géant relatif à une hauteur type de 1920px vertical
+    scale_factor = canvas_h / 1920.0
+    # On assure une échelle minimale pour les basses résolutions
+    base_ofm_scale = max(0.5, scale_factor)
+
+    # 📏 LES NOUVELLES BASES Master Force OFM (Pour un Reels de 1920h)
+    font_size = int(300 * base_ofm_scale) if length < 15 else (int(200 * base_ofm_scale) if length < 50 else int(150 * base_ofm_scale))
     font_size += random.randint(-5, 5)
 
     try: font = ImageFont.truetype("arial.ttf", font_size)
@@ -57,7 +63,7 @@ def create_unique_text_sticker(text, reel_size, base_y):
 
     with Pilmoji(img, source=AppleEmojiSource) as pilmoji:
         lines = []
-        max_w = int(canvas_w * 0.8)
+        max_w = int(canvas_w * 0.9) # Plus de marge pour OFM
         words = text.split()
         line = ""
         for w in words:
@@ -66,21 +72,20 @@ def create_unique_text_sticker(text, reel_size, base_y):
             else: lines.append(line); line = w
         lines.append(line)
         
+        # Stroke dynamique renforcé pour OFM ( visible sur blanc/noir )
+        stroke_w = max(2, int(6 * base_ofm_scale))
         total_h = len(lines) * (font_size + 20)
         start_y = final_y - (total_h // 2)
 
         for l in lines:
             w_t = pilmoji.getsize(l, font=font)[0]
-            # Stroke dynamique pour que le contour noir soit visible peu importe la taille
-            stroke_w = max(1, int(5 * base_font_scale))
-            # On dessine le nouveau texte géant
             pilmoji.text(((canvas_w - w_t) // 2, start_y), l, font=font, 
                          fill="white", stroke_width=stroke_w, stroke_fill="black")
             start_y += font_size + 20
             
     return np.array(img)
 
-def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_make, modele_nom, progress_bar=None, status_text=None, stop_event=None):
+def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_make, modele_nom, stop_event=None):
     
     with open(chemin_captions, "r", encoding="utf-8") as f:
         all_captions = [c.strip() for c in f.read().split('\n\n') if c.strip()]
@@ -104,29 +109,26 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
 
         txt = all_captions[i % len(all_captions)]
         
-        if status_text:
-            status_text.text(f"⚡ [{i+1}/{n_to_make}] Production de la variante : {txt[:20]}...")
-
-        # --- PACK ANTI-BAN ---
+        # --- PACK ANTI-BAN CORRIGÉ ---
         zoom_factor = random.uniform(1.02, 1.04)
         
-        # 1. Zoom proportionnel (ça ne déforme plus rien)
+        # 1. Zoom proportionnel (ça ne déforme plus rien, Turn 10)
         video_reel = clip_base.resized(zoom_factor)
         
         active_effects = []
         if i % 2 == 0:
             active_effects.append(vfx.MirrorX())
             
-        # Ajout furtif de la couleur (Variation légère pour brouiller l'IA d'Insta)
+        # Ajout furtif de la couleur (Variation très légère pour brouiller l'IA d'Insta, Turn 11)
         try:
             active_effects.append(vfx.Colorx(random.uniform(0.99, 1.01)))
         except:
-            pass # Si ça bloque sur certaines versions de MoviePy, on ignore
+            pass 
 
         if active_effects:
             video_reel = video_reel.with_effects(active_effects)
         
-        # 2. Recadrage à la dimension exacte de la vidéo d'origine (Fini le zoom flou !)
+        # 2. Recadrage à la dimension exacte de la vidéo d'origine (Fini le zoom flou, Turn 10 !)
         video_reel = video_reel.cropped(
             x_center=video_reel.w/2, 
             y_center=video_reel.h/2, 
@@ -139,7 +141,7 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         video_reel = video_reel.subclipped(0, video_reel.duration - cut_time)
 
         # Rendu du texte avec la vraie dimension de la vidéo
-        # C'est ici que le nouveau texte GÉANT est créé
+        # C'est ici que le nouveau texte Master Force GÉANT est créé
         txt_img = create_unique_text_sticker(txt, (clip_base.w, clip_base.h), base_y)
         txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
         # On superpose le nouveau texte GÉANT par-dessus la vidéo source
@@ -154,7 +156,4 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         
         reels_reussis += 1
         
-        if progress_bar:
-            progress_bar.progress(reels_reussis / n_to_make)
-
     clip_base.close()
