@@ -3,111 +3,108 @@ import os
 import time
 import zipfile
 from utilisateurs import USERS
-from generateur import lancer_production_serie # Assure-toi que ton fichier s'appelle bien generateur.py
+from generateur import lancer_production_serie # Ton moteur avec MirrorX, Zoom et Face Detection
 
-# --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="OR D'USINE - Traffic Machine", page_icon="🚀")
+# --- 1. CONFIGURATION ET STYLES ---
+st.set_page_config(page_title="OR D'USINE - Traffic Machine", page_icon="💎")
 
-# --- INITIALISATION DES DOSSIERS (Le correctif pour l'erreur de ton pote) ---
-for folder in ["uploads", "outputs"]:
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+# --- 2. LE FIX "ZÉRO ERREUR" (Crée les dossiers au démarrage) ---
+for d in ["uploads", "outputs"]:
+    if not os.path.exists(d):
+        os.makedirs(d)
 
-# --- SYSTÈME DE LOGIN ---
+# --- 3. SYSTÈME DE LOGIN ---
 if 'auth' not in st.session_state:
     st.session_state.auth = False
 
-def login():
-    st.title("🔒 Accès Privé - OR D'USINE")
-    user = st.text_input("Utilisateur")
-    pw = st.text_input("Mot de passe", type="password")
-    if st.button("Se connecter"):
-        if user in USERS and USERS[user] == pw:
+if not st.session_state.auth:
+    st.title("🔑 Connexion Usine")
+    u = st.text_input("Identifiant")
+    p = st.text_input("Mot de passe", type="password")
+    if st.button("Entrer dans l'Usine"):
+        if u in USERS and USERS[u] == p:
             st.session_state.auth = True
-            st.session_state.user = user
+            st.session_state.user = u
             st.rerun()
         else:
-            st.error("Identifiants incorrects")
-
-if not st.session_state.auth:
-    login()
+            st.error("Accès refusé.")
 else:
-    # --- INTERFACE PRINCIPALE ---
-    st.sidebar.title(f"👤 {st.session_state.user}")
-    if st.sidebar.button("Se déconnecter"):
+    # --- 4. L'INTERFACE QUE TU AIMES ---
+    st.sidebar.title(f"🛠️ Admin: {st.session_state.user}")
+    if st.sidebar.button("Déconnexion"):
         st.session_state.auth = False
         st.rerun()
 
-    st.title("🚀 Générateur de Reels Furtifs")
-    st.write("L'usine est prête. Poste en masse, reste indétectable.")
+    st.title("💎 OR D'USINE : Traffic Machine")
+    
+    # Dossier Archives / Modèle
+    modele_nom = st.text_input("📁 Nom de la Modèle (pour les archives)", placeholder="ex: Clara_D")
 
-    # 1. Upload de la vidéo source
-    video_file = st.file_uploader("Étape 1 : Choisis ta vidéo source", type=["mp4", "mov", "avi"])
+    # Upload
+    vid_file = st.file_uploader("🎬 Upload ta vidéo source", type=["mp4", "mov"])
 
-    # 2. Captions (Textes)
-    st.subheader("Étape 2 : Tes Textes (Captions)")
-    caption_text = st.text_area("Écris tes textes ici (sépare chaque texte par une ligne vide)", 
-                                height=150, 
-                                placeholder="Texte du Reel 1\n\nTexte du Reel 2\n\n...")
+    # Captions (le coeur du système)
+    st.subheader("📝 Tes Captions (Sépare par deux entrées)")
+    cap_text = st.text_area("Colle tes textes ici", height=200, placeholder="Texte 1\n\nTexte 2...")
 
-    # 3. Paramètres de l'usine
-    st.subheader("Étape 3 : Réglages de production")
-    col1, col2 = st.columns(2)
-    with col1:
-        n_reels = st.number_input("Nombre de Reels à générer", min_value=1, max_value=50, value=5)
-    with col2:
-        mode_furtif = st.checkbox("Pack Anti-Ban (Mirror + Zoom + Metadata)", value=True)
+    # Réglages
+    n_reels = st.number_input("🔢 Nombre de variantes à sortir", min_value=1, max_value=50, value=5)
 
-    # --- LANCEMENT DE L'USINE ---
-    if st.button("🔥 LANCER LA PRODUCTION", use_container_width=True):
-        if video_file and caption_text:
-            # Sauvegarde temporaire de la vidéo
-            path_in = os.path.join("uploads", video_file.name)
+    # --- 5. LE BOUTON DE FEU ---
+    if st.button("🔥 GÉNÉRER LES REELS", use_container_width=True):
+        if vid_file and cap_text and modele_nom:
+            
+            # Chemin de sauvegarde (C'est ici qu'on a réparé l'erreur !)
+            path_in = os.path.join("uploads", vid_file.name)
+            
+            # --- LE PETIT FIX DE SÉCURITÉ ---
+            if not os.path.exists("uploads"): os.makedirs("uploads")
+            
             with open(path_in, "wb") as f:
-                f.write(video_file.getbuffer())
+                f.write(vid_file.getbuffer())
 
-            # Sauvegarde des captions
-            path_captions = os.path.join("uploads", "temp_captions.txt")
-            with open(path_captions, "w", encoding="utf-8") as f:
-                f.write(caption_text)
+            # Sauvegarde des captions temporaires
+            path_caps = os.path.join("uploads", "temp_caps.txt")
+            with open(path_caps, "w", encoding="utf-8") as f:
+                f.write(cap_text)
 
-            # Dossier de sortie spécifique pour l'utilisateur
-            user_output = os.path.join("outputs", st.session_state.user)
-            if not os.path.exists(user_output):
-                os.makedirs(user_output)
+            # Création du dossier ARCHIVES spécifique à la modèle
+            dossier_modele = os.path.join("outputs", modele_nom)
+            if not os.path.exists(dossier_modele):
+                os.makedirs(dossier_modele)
 
-            # Barre de progression
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+            # Barre de progression et Statut
+            prog = st.progress(0)
+            status = st.empty()
 
             try:
-                # APPEL AU GÉNÉRATEUR (Celui que tu as déjà dans generateur.py)
+                # On lance ton moteur (generateur.py)
                 lancer_production_serie(
                     path_in, 
-                    path_captions, 
-                    user_output, 
+                    path_caps, 
+                    dossier_modele, 
                     n_reels, 
-                    st.session_state.user,
-                    progress_bar=progress_bar,
-                    status_text=status_text
+                    modele_nom,
+                    progress_bar=prog,
+                    status_text=status
                 )
 
-                st.success("✅ Production terminée !")
+                st.success(f"✅ {n_reels} Reels archivés dans le dossier {modele_nom} !")
 
-                # Création du ZIP pour le téléchargement
-                zip_path = os.path.join("outputs", f"reels_{st.session_state.user}.zip")
-                with zipfile.ZipFile(zip_path, 'w') as zipf:
-                    for root, dirs, files in os.walk(user_output):
+                # Préparation du ZIP pour le téléchargement direct
+                zip_name = f"reels_{modele_nom}.zip"
+                with zipfile.ZipFile(zip_name, 'w') as z:
+                    for root, dirs, files in os.walk(dossier_modele):
                         for file in files:
-                            zipf.write(os.path.join(root, file), file)
+                            z.write(os.path.join(root, file), file)
 
-                with open(zip_path, "rb") as f:
-                    st.download_button("⬇️ TÉLÉCHARGER TOUS LES REELS (ZIP)", f, file_name=f"mes_reels_{int(time.time())}.zip")
+                with open(zip_name, "rb") as f:
+                    st.download_button("📥 TÉLÉCHARGER LE PACK", f, file_name=zip_name)
 
             except Exception as e:
-                st.error(f"Erreur d'usine : {e}")
+                st.error(f"Erreur technique : {e}")
         else:
-            st.warning("⚠️ Oublie pas la vidéo et les textes !")
+            st.warning("⚠️ Remplis tout : Nom de modèle, Vidéo et Captions !")
 
     st.markdown("---")
-    st.caption("Propulsé par OR D'USINE - Spécial OFM Traffic Machine.")
+    st.info("💡 Tes vidéos sont stockées dans le dossier 'outputs' sur le serveur.")
