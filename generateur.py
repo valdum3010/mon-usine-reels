@@ -46,8 +46,8 @@ def create_unique_text_sticker(text, reel_size, base_y):
     
     # On adapte la taille de la police à la largeur de la vidéo
     base_font_scale = canvas_w / 1080.0
-    font_size = int(140 * base_font_scale) if length < 15 else (int(95 * base_font_scale) if length < 50 else int(70 * base_font_scale))
-    font_size += random.randint(-3, 3)
+   font_size = int(280 * base_font_scale) if length < 15 else (int(190 * base_font_scale) if length < 50 else int(140 * base_font_scale))
+    font_size += random.randint(-5, 5)
 
     try: font = ImageFont.truetype("arial.ttf", font_size)
     except: font = ImageFont.load_default()
