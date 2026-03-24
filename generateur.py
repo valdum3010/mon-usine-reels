@@ -1,4 +1,8 @@
-import os, random, numpy as np, warnings, cv2
+import os
+import random
+import numpy as np
+import warnings
+import cv2
 from datetime import datetime
 from PIL import Image, ImageFont
 from pilmoji import Pilmoji
@@ -14,16 +18,24 @@ def get_base_y_placement(video_path, canvas_h):
         cap = cv2.VideoCapture(video_path)
         ret, frame = cap.read()
         cap.release()
-        if not ret: return 300
+        
+        # Par défaut, on place en haut (environ 15% de l'écran)
+        default_top = int(canvas_h * 0.15)
+        default_bottom = int(canvas_h * 0.75)
+        
+        if not ret: return default_top
+        
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+        
         if len(faces) > 0:
             (x, y, w, h) = faces[0]
             face_y = (y + h/2) * (canvas_h / frame.shape[0])
-            if face_y < canvas_h * 0.45: return 1450 
-            else: return 300 
+            # Si le visage est en haut, on met le texte en bas, et inversement
+            if face_y < canvas_h * 0.45: return default_bottom 
+            else: return default_top 
     except: pass
-    return 300 
+    return int(canvas_h * 0.15) 
 
 def create_unique_text_sticker(text, reel_size, base_y):
     canvas_w, canvas_h = reel_size
@@ -31,7 +43,10 @@ def create_unique_text_sticker(text, reel_size, base_y):
     random_y_offset = random.randint(-40, 40)
     final_y = base_y + random_y_offset
     length = len(text)
-    font_size = 140 if length < 15 else (95 if length < 50 else 70)
+    
+    # On adapte la taille de la police à la largeur de la vidéo
+    base_font_scale = canvas_w / 1080.0
+    font_size = int(140 * base_font_scale) if length < 15 else (int(95 * base_font_scale) if length < 50 else int(70 * base_font_scale))
     font_size += random.randint(-3, 3)
 
     try: font = ImageFont.truetype("arial.ttf", font_size)
@@ -53,12 +68,14 @@ def create_unique_text_sticker(text, reel_size, base_y):
 
         for l in lines:
             w_t = pilmoji.getsize(l, font=font)[0]
+            # Stroke dynamique pour que le contour noir soit visible peu importe la taille
+            stroke_w = max(1, int(5 * base_font_scale))
             pilmoji.text(((canvas_w - w_t) // 2, start_y), l, font=font, 
-                         fill="white", stroke_width=5, stroke_fill="black")
+                         fill="white", stroke_width=stroke_w, stroke_fill="black")
             start_y += font_size + 20
+            
     return np.array(img)
 
-# NOUVEAU PARAMÈTRE : stop_event
 def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_make, modele_nom, progress_bar=None, status_text=None, stop_event=None):
     
     with open(chemin_captions, "r", encoding="utf-8") as f:
@@ -67,14 +84,16 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
     if not all_captions:
         all_captions = ["Texte par défaut"]
 
-    base_y = get_base_y_placement(chemin_video, 1920)
     clip_base = VideoFileClip(chemin_video)
+    
+    # 📏 On calcule le placement selon la VRAIE hauteur de la vidéo
+    base_y = get_base_y_placement(chemin_video, clip_base.h)
     
     reels_reussis = 0
 
     for i in range(n_to_make):
         
-        # 🛑 VÉRIFICATION DU BOUTON STOP AVANT CHAQUE NOUVEAU REEL
+        # 🛑 VÉRIFICATION DU BOUTON STOP
         if stop_event and stop_event.is_set():
             print("Arrêt de la production demandé par l'utilisateur.")
             break
@@ -84,24 +103,39 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         if status_text:
             status_text.text(f"⚡ [{i+1}/{n_to_make}] Production de la variante : {txt[:20]}...")
 
-        # Pack Anti-Ban
-        zoom_factor = random.uniform(1.01, 1.04)
-        new_height = int(1920 * zoom_factor)
-        video_reel = clip_base.resized(height=new_height)
+        # --- PACK ANTI-BAN CORRIGÉ (Dynamique) ---
+        zoom_factor = random.uniform(1.02, 1.04)
+        
+        # 1. Zoom proportionnel (ça ne déforme plus rien)
+        video_reel = clip_base.resized(zoom_factor)
         
         active_effects = []
         if i % 2 == 0:
             active_effects.append(vfx.MirrorX())
             
+        # Ajout furtif de la couleur (Variation très légère pour brouiller l'IA d'Insta)
+        try:
+            active_effects.append(vfx.Colorx(random.uniform(0.99, 1.01)))
+        except:
+            pass # Si ça bloque sur certaines versions de MoviePy, on ignore
+
         if active_effects:
             video_reel = video_reel.with_effects(active_effects)
         
-        video_reel = video_reel.cropped(x_center=video_reel.w/2, y_center=video_reel.h/2, width=1080, height=1920)
+        # 2. Recadrage à la dimension exacte de la vidéo d'origine (Fini le zoom extrême !)
+        video_reel = video_reel.cropped(
+            x_center=video_reel.w/2, 
+            y_center=video_reel.h/2, 
+            width=clip_base.w, 
+            height=clip_base.h
+        )
+        
+        # 3. Coupe temporelle aléatoire
         cut_time = random.uniform(0.05, 0.25)
         video_reel = video_reel.subclipped(0, video_reel.duration - cut_time)
 
-        # Rendu
-        txt_img = create_unique_text_sticker(txt, (1080, 1920), base_y)
+        # Rendu du texte avec la vraie dimension de la vidéo
+        txt_img = create_unique_text_sticker(txt, (clip_base.w, clip_base.h), base_y)
         txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
         final = CompositeVideoClip([video_reel, txt_clip])
         
@@ -118,4 +152,3 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
             progress_bar.progress(reels_reussis / n_to_make)
 
     clip_base.close()
-    return reels_reussis
