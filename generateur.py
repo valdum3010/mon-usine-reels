@@ -19,9 +19,11 @@ def get_base_y_placement(video_path, canvas_h):
         ret, frame = cap.read()
         cap.release()
         
-        # Par défaut, on place en haut (environ 15% de l'écran)
-        default_top = int(canvas_h * 0.15)
-        default_bottom = int(canvas_h * 0.75)
+        # --- MARGES DE SÉCURITÉ REELS / TIKTOK ---
+        # 20% du haut (évite les menus du haut)
+        default_top = int(canvas_h * 0.20)
+        # 65% du haut (laisse 35% de vide en bas pour éviter d'être caché par la description)
+        default_bottom = int(canvas_h * 0.65)
         
         if not ret: return default_top
         
@@ -31,31 +33,29 @@ def get_base_y_placement(video_path, canvas_h):
         if len(faces) > 0:
             (x, y, w, h) = faces[0]
             face_y = (y + h/2) * (canvas_h / frame.shape[0])
-            # Si le visage est en haut, on met le texte en bas, et inversement
-            if face_y < canvas_h * 0.45: return default_bottom 
-            else: return default_top 
+            # Si le visage est dans la moitié haute, on met le texte en bas
+            if face_y < canvas_h * 0.5: 
+                return default_bottom 
+            else: 
+                return default_top 
     except: pass
-    return int(canvas_h * 0.15) 
+    return int(canvas_h * 0.20) 
 
 def create_unique_text_sticker(text, reel_size, base_y):
     canvas_w, canvas_h = reel_size
     img = Image.new('RGBA', reel_size, (0, 0, 0, 0))
-    # Réduction radicale de l'offset aléatoire pour OFM ultra-propre
-    random_y_offset = random.randint(-10, 10)
+    random_y_offset = random.randint(-15, 15)
     final_y = base_y + random_y_offset
     length = len(text)
     
-    # --- CALCUL MASTER FORCE BRUTE V3 (Pixels Absolus) ---
-    scale_factor = canvas_h / 1920.0
+    # On se base sur la largeur pour que le texte s'adapte parfaitement
+    base_font_scale = canvas_w / 1080.0
 
-    # 📏 Calcul du font_size GÉANT
-    font_size = int(500 * scale_factor) if length < 15 else (int(350 * scale_factor) if length < 50 else int(250 * scale_factor))
+    # --- NOUVELLES TAILLES (Propres, lisibles, pas abusées) ---
+    font_size = int(110 * base_font_scale) if length < 15 else (int(80 * base_font_scale) if length < 50 else int(60 * base_font_scale))
+    font_size += random.randint(-3, 3)
 
-    # On assure une taille minimale absolue pour éviter les textes microscopiques
-    font_size = max(150, font_size)
-    font_size += random.randint(-10, 10)
-
-    # 🚨 LA CORRECTION MAGIQUE EST ICI (ARIALNBI.TTF en majuscules !) 🚨
+    # On utilise bien ta police envoyée sur GitHub !
     try: 
         font = ImageFont.truetype("ARIALNBI.TTF", font_size)
     except Exception as e: 
@@ -64,8 +64,8 @@ def create_unique_text_sticker(text, reel_size, base_y):
 
     with Pilmoji(img, source=AppleEmojiSource) as pilmoji:
         lines = []
-        # Plus de marge sur les côtés pour OFM
-        max_w = int(canvas_w * 0.9)
+        # Marge de sécurité latérale (max 85% de l'écran en largeur)
+        max_w = int(canvas_w * 0.85)
         words = text.split()
         line = ""
         for w in words:
@@ -74,19 +74,20 @@ def create_unique_text_sticker(text, reel_size, base_y):
             else: lines.append(line); line = w
         lines.append(line)
         
-        # Stroke (contour noir) dynamique renforcé
-        scale_factor_stroke = canvas_h / 1920.0
-        stroke_w = max(2, int(8 * scale_factor_stroke))
-
-        total_h = len(lines) * (font_size + 20)
+        # Contour noir proportionnel (plus fin pour un rendu plus propre)
+        stroke_w = max(2, int(4 * base_font_scale))
+        
+        # Espacement entre les lignes
+        espacement = int(15 * base_font_scale)
+        total_h = len(lines) * (font_size + espacement)
         start_y = final_y - (total_h // 2)
 
         for l in lines:
             w_t = pilmoji.getsize(l, font=font)[0]
-            # On dessine le nouveau texte GÉANT avec le contour épais
+            # Dessin du texte au centre
             pilmoji.text(((canvas_w - w_t) // 2, start_y), l, font=font, 
                          fill="white", stroke_width=stroke_w, stroke_fill="black")
-            start_y += font_size + 20
+            start_y += font_size + espacement
             
     return np.array(img)
 
@@ -100,14 +101,12 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
 
     clip_base = VideoFileClip(chemin_video)
     
-    # 📏 On calcule le placement selon la VRAIE hauteur de la vidéo
+    # 📏 Calcul du placement initial (esquive visage)
     base_y = get_base_y_placement(chemin_video, clip_base.h)
     
     reels_reussis = 0
 
     for i in range(n_to_make):
-        
-        # 🛑 VÉRIFICATION DU BOUTON STOP AVANT CHAQUE NOUVEAU REEL
         if stop_event and stop_event.is_set():
             print("Arrêt de la production demandé par l'utilisateur.")
             break
@@ -119,8 +118,6 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
 
         # --- PACK ANTI-BAN ---
         zoom_factor = random.uniform(1.02, 1.04)
-        
-        # 1. Zoom proportionnel
         video_reel = clip_base.resized(zoom_factor)
         
         active_effects = []
@@ -135,7 +132,6 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         if active_effects:
             video_reel = video_reel.with_effects(active_effects)
         
-        # 2. Recadrage à la dimension exacte de la vidéo d'origine
         video_reel = video_reel.cropped(
             x_center=video_reel.w/2, 
             y_center=video_reel.h/2, 
@@ -143,11 +139,10 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
             height=clip_base.h
         )
         
-        # 3. Coupe temporelle aléatoire
         cut_time = random.uniform(0.05, 0.25)
         video_reel = video_reel.subclipped(0, video_reel.duration - cut_time)
 
-        # Rendu du texte avec la vraie dimension de la vidéo
+        # Rendu du texte avec esquive de visage et marges de sécurité
         txt_img = create_unique_text_sticker(txt, (clip_base.w, clip_base.h), base_y)
         txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
         final = CompositeVideoClip([video_reel, txt_clip])
