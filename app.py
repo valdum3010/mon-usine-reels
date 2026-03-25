@@ -1,228 +1,132 @@
 import streamlit as st
 import os
-import shutil
 import time
-import threading
-from datetime import datetime
-from utilisateurs import USERS 
-from generateur import lancer_production_serie
+import generateur  # Importe ton fichier de logique
+from PIL import Image
 
-# --- CONFIGURATION & LOOK ---
-st.set_page_config(page_title="OR D'USINE | AI Studio", page_icon="💎", layout="wide")
+# --- CONFIGURATION DE LA PAGE ---
+st.set_page_config(page_title="OR-DUSINE AI PRO", page_icon="💎", layout="wide")
 
+# --- DESIGN LUXURY GOLD & DARK (CSS CUSTOM) ---
 st.markdown("""
-<style>
-    .stApp { background: linear-gradient(135deg, #0e1117 0%, #1a1c24 100%); }
-    .stButton>button {
-        border-radius: 12px;
-        background: linear-gradient(90deg, #6366f1 0%, #a855f7 100%);
-        color: white; border: none; padding: 10px 24px; font-weight: bold; transition: all 0.3s ease;
-    }
-    [data-testid="stExpander"] { background-color: #1e222d !important; border: 1px solid #30363d !important; border-radius: 15px !important; }
-    [data-testid="stSidebar"] { background-color: #0e1117 !important; border-right: 1px solid #30363d; }
-    h1 { background: -webkit-linear-gradient(#fff, #99aab5); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
-</style>
-""", unsafe_allow_html=True)
-
-# --- FONCTION DE MIGRATION ---
-def migrer_anciens_fichiers(user_name):
-    base_reels, base_caps = "Output_Reels", "CAPTIONS_STORAGE"
-    target_reels, target_caps = os.path.join(base_reels, user_name), os.path.join(base_caps, user_name)
-    os.makedirs(target_reels, exist_ok=True)
-    os.makedirs(target_caps, exist_ok=True)
-
-    if user_name == "admin":
-        for f in os.listdir(base_caps):
-            full_path = os.path.join(base_caps, f)
-            if os.path.isfile(full_path) and f.endswith(".txt"): shutil.move(full_path, os.path.join(target_caps, f))
-        for d in os.listdir(base_reels):
-            full_path = os.path.join(base_reels, d)
-            if os.path.isdir(full_path) and d not in USERS and d != user_name:
-                try: shutil.move(full_path, os.path.join(target_reels, d))
-                except: pass
-
-# --- SYSTÈME DE LOGIN ---
-def login():
-    if "authenticated" not in st.session_state: st.session_state["authenticated"] = False
-    if not st.session_state["authenticated"]:
-        col_l, col_c, col_r = st.columns([1,2,1])
-        with col_c:
-            st.markdown("<h1 style='text-align: center;'>💎 OR D'USINE</h1>", unsafe_allow_html=True)
-            user = st.text_input("Identifiant")
-            pw = st.text_input("Mot de passe", type="password")
-            if st.button("DÉVERROUILLER", use_container_width=True):
-                if user in USERS and USERS[user] == pw:
-                    st.session_state["authenticated"] = True
-                    st.session_state["username"] = user
-                    migrer_anciens_fichiers(user)
-                    st.rerun()
-                else: st.error("Identifiants incorrects")
-        st.stop()
-
-login()
-user_actif = st.session_state["username"]
-
-# --- SETUP DOSSIERS ---
-user_reels_path = os.path.join("Output_Reels", user_actif)
-user_captions_path = os.path.join("CAPTIONS_STORAGE", user_actif)
-os.makedirs(user_reels_path, exist_ok=True)
-os.makedirs(user_captions_path, exist_ok=True)
-os.makedirs("inputs", exist_ok=True) # LE CORRECTIF ANTI-CRASH EST LÀ
-
-# --- SIDEBAR & MENU ---
-st.sidebar.markdown(f"<h2 style='color: #a855f7;'>👤 {user_actif.upper()}</h2>", unsafe_allow_html=True)
-
-# L'intégration propre du mode Admin
-menu_options = ["🚀 PRODUCTION", "✍️ CAPTIONS", "📁 MON DRIVE"]
-
-if user_actif == "admin":
-    st.sidebar.markdown("---")
-    admin_mode = st.sidebar.toggle("🛠️ MODE ADMIN")
-    if admin_mode:
-        menu_options.insert(0, "🛠️ PANNEAU ADMIN") # Ajoute l'option au début du menu
-
-page = st.sidebar.radio("MENU", menu_options)
-
-if st.sidebar.button("Déconnexion"):
-    st.session_state["authenticated"] = False
-    st.rerun()
-
-# ==========================================
-# PAGE 0 : PANNEAU ADMIN (Seulement si toggle activé)
-# ==========================================
-if page == "🛠️ PANNEAU ADMIN":
-    st.title("🛠️ Panneau de Contrôle Master")
-    tab1, tab2 = st.tabs(["👥 Gérer les Logins", "📜 Logs d'Activité"])
+    <style>
+    /* Fond et texte global */
+    .stApp { background-color: #0E1117; color: white; }
     
-    with tab1:
-        st.subheader("Ajouter un nouvel accès")
-        new_user = st.text_input("Nom de l'ami")
-        new_pass = st.text_input("Mot de passe choisi")
-        if st.button("CRÉER LE COMPTE"):
-            if new_user and new_pass:
-                USERS[new_user] = new_pass
-                st.success(f"✅ Compte créé pour {new_user} ! (Note: s'effacera au redémarrage si pas écrit dans utilisateurs.py)")
-            else:
-                st.error("Remplis les deux cases !")
-        st.markdown("---")
-        st.write("**Utilisateurs actuels (en mémoire) :**")
-        st.json(USERS)
+    /* Bouton de production massif et doré */
+    div.stButton > button:first-child {
+        background: linear-gradient(45deg, #FFD700, #B8860B);
+        color: black;
+        border: none;
+        font-weight: bold;
+        font-size: 20px;
+        height: 3em;
+        width: 100%;
+        border-radius: 12px;
+        box-shadow: 0px 4px 15px rgba(255, 215, 0, 0.3);
+        transition: 0.3s;
+    }
+    div.stButton > button:first-child:hover {
+        transform: scale(1.02);
+        box-shadow: 0px 6px 20px rgba(255, 215, 0, 0.5);
+        color: white;
+    }
 
-    with tab2:
-        st.subheader("Journal de l'usine")
-        if os.path.exists("Output_Reels"):
-            for u in os.listdir("Output_Reels"):
-                if os.path.isdir(os.path.join("Output_Reels", u)):
-                    st.write(f"📁 L'utilisateur **{u}** a des fichiers dans son Drive.")
+    /* Style des barres de progression */
+    .stProgress > div > div > div > div { background-color: #FFD700; }
+    
+    /* Sidebar premium */
+    [data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #FFD700; }
+    
+    /* Titres dorés */
+    h1, h2, h3 { color: #FFD700 !important; font-family: 'Arial Rounded MT Bold', sans-serif; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# ==========================================
-# PAGE 1 : PRODUCTION
-# ==========================================
-elif page == "🚀 PRODUCTION":
-    st.title("🚀 Nouvelle Campagne")
+# --- NAVIGATION ---
+with st.sidebar:
+    st.title("💎 OR-DUSINE PRO")
+    st.markdown("---")
+    menu = st.radio("MENU NAVIGATION", ["✍️ ÉDITEUR CAPTIONS", "🚀 CENTRE DE PRODUCTION", "📂 MES VIDÉOS"])
+    st.markdown("---")
+    st.info("Statut Serveur : ✅ Opérationnel")
+
+# --- ONGLET 1 : ÉDITEUR DE CAPTIONS ---
+if menu == "✍️ ÉDITEUR CAPTIONS":
+    st.header("✍️ Création de Scripts")
+    st.write("Règle : 1 Entrée = Ligne suivante | 2 Entrées = Espace | 3 Entrées = Nouvelle Vidéo")
+    
+    nom_script = st.text_input("Nom du script (ex: Campagne_Lundi)", "mon_script")
+    contenu_script = st.text_area("Colle ton texte ici...", height=300)
+    
+    if st.button("💾 SAUVEGARDER LE SCRIPT"):
+        with open(f"{nom_script}.txt", "w", encoding="utf-8") as f:
+            f.write(contenu_script)
+        st.success(f"Script '{nom_script}' prêt pour la production !")
+
+# --- ONGLET 2 : CENTRE DE PRODUCTION (DYNAMIQUE) ---
+elif menu == "🚀 CENTRE DE PRODUCTION":
+    st.header("🚀 Lancement de la Production")
+    
     col1, col2 = st.columns(2)
     with col1:
-        archive_nom = st.text_input("Nom de la session", placeholder="Ex: Projet_X")
-        nb_reels = st.number_input("Nombre de vidéos", min_value=1, value=10)
+        video_file = st.file_uploader("🎥 Vidéo de fond (MP4)", type=["mp4", "mov"])
     with col2:
-        fichiers_txt = [f for f in os.listdir(user_captions_path) if f.endswith('.txt')]
-        cap_select = st.selectbox("📂 Fichier texte", ["Aucun"] + fichiers_txt)
-        vid_file = st.file_uploader("🎬 Vidéo source", type=["mp4"])
-
-    if st.button("LANCER LA FABRICATION", type="primary", use_container_width=True):
-        if not vid_file or cap_select == "Aucun":
-            st.error("⚠️ Manque vidéo ou texte !")
-        else:
-            path_in = os.path.join("inputs", f"{user_actif}_{vid_file.name}")
-            with open(path_in, "wb") as f: f.write(vid_file.getbuffer())
-            
-            sess_nom = archive_nom if archive_nom else f"Sess_{int(time.time())}"
-            path_out = os.path.join(user_reels_path, sess_nom)
-            os.makedirs(path_out, exist_ok=True)
-            
-            stop_ev = threading.Event()
-            st.session_state['stop_ev'] = stop_ev
-            
-            def travail_bg():
-                try:
-                    lancer_production_serie(path_in, os.path.join(user_captions_path, cap_select), path_out, nb_reels, user_actif, stop_event=stop_ev)
-                finally:
-                    if os.path.exists(path_in): os.remove(path_in)
-
-            threading.Thread(target=travail_bg).start()
-            st.success("C'est en cuisine ! Suis l'avancée ci-dessous.")
-            st.session_state['en_cours'] = path_out
-            st.session_state['total'] = nb_reels
-
-    if 'en_cours' in st.session_state:
-        d, t = st.session_state['en_cours'], st.session_state['total']
-        if os.path.exists(d):
-            finis = len([f for f in os.listdir(d) if f.endswith('.mp4')])
-            st.progress(finis/t)
-            st.write(f"Vidéos prêtes : {finis}/{t}")
-            if st.button("🛑 ARRÊTER"): 
-                st.session_state['stop_ev'].set()
-                del st.session_state['en_cours']; st.rerun()
-
-# ==========================================
-# PAGE 2 : CAPTIONS
-# ==========================================
-elif page == "✍️ CAPTIONS":
-    st.title("✍️ Gestion des Captions")
-    fichiers = [f for f in os.listdir(user_captions_path) if f.endswith('.txt')]
-    choix = st.selectbox("📂 Charger un fichier :", ["➕ Nouveau..."] + fichiers)
+        scripts = [f for f in os.listdir() if f.endswith(".txt")]
+        script_choisi = st.selectbox("📄 Choisir un Script", scripts)
     
-    n_init = choix if choix != "➕ Nouveau..." else ""
-    cont_init = ""
-    if choix != "➕ Nouveau...":
-        with open(os.path.join(user_captions_path, choix), "r", encoding="utf-8") as f:
-            cont_init = f.read()
+    nb_reels = st.number_input("Quantité de variantes à générer", min_value=1, max_value=50, value=5)
+    nom_projet = st.text_input("Nom du projet", "Production_Alpha")
 
-    nom_f = st.text_input("Nom du fichier (.txt)", value=n_init)
-    txt_f = st.text_area("Texte", value=cont_init, height=300)
-    
-    b1, b2 = st.columns([4,1])
-    with b1:
-        if st.button("💾 Sauvegarder", use_container_width=True, type="primary"):
-            full_n = nom_f if nom_f.endswith(".txt") else nom_f + ".txt"
-            with open(os.path.join(user_captions_path, full_n), "w", encoding="utf-8") as f:
-                f.write(txt_f)
-            st.success("Enregistré !")
-            time.sleep(1); st.rerun()
-    with b2:
-        if choix != "➕ Nouveau..." and st.button("🗑️", use_container_width=True):
-            os.remove(os.path.join(user_captions_path, choix)); st.rerun()
-
-# ==========================================
-# PAGE 3 : MON DRIVE
-# ==========================================
-elif page == "📁 MON DRIVE":
-    st.title("📁 Ton Drive Personnel")
-    sessions = [s for s in os.listdir(user_reels_path) if os.path.isdir(os.path.join(user_reels_path, s))]
-    if not sessions: st.info("Aucune session trouvée.")
-        
-    for s in sessions:
-        path_s = os.path.join(user_reels_path, s)
-        reels = [f for f in os.listdir(path_s) if f.endswith('.mp4')]
-        with st.expander(f"📦 {s} ({len(reels)} vidéos)"):
-            c1, c2 = st.columns(2)
-            with c1:
-                path_z = path_s + ".zip"
-                if st.button("🗜️ Créer ZIP", key=f"z_{s}"):
-                    shutil.make_archive(path_s, 'zip', path_s); st.rerun()
-                if os.path.exists(path_z):
-                    with open(path_z, "rb") as fz:
-                        st.download_button("📥 Télécharger ZIP", fz, file_name=f"{s}.zip", key=f"dl_z_{s}")
-            with c2:
-                if st.button("🗑️ Supprimer", key=f"del_s_{s}"):
-                    shutil.rmtree(path_s)
-                    if os.path.exists(path_z): os.remove(path_z)
-                    st.rerun()
+    if st.button("⚡ LANCER LA MACHINE"):
+        if video_file and script_choisi:
+            # Sauvegarde temporaire de la vidéo uploadée
+            with open("temp_video.mp4", "wb") as f:
+                f.write(video_file.read())
+            
+            # --- ZONE DE SUIVI EN TEMPS RÉEL ---
             st.markdown("---")
-            for r in reels:
-                path_r = os.path.join(path_s, r)
-                cr1, cr2 = st.columns([4, 1])
-                with cr1: st.write(f"🎬 `{r}`")
-                with cr2:
-                    with open(path_r, "rb") as fr:
-                        st.download_button("⬇️", fr, file_name=r, key=f"dl_r_{s}_{r}")
+            status_placeholder = st.empty()
+            progress_placeholder = st.empty()
+            
+            with st.status("🏗️ Analyse et rendu en cours...", expanded=True) as status:
+                bar = progress_placeholder.progress(0)
+                
+                # Création du dossier de sortie si besoin
+                os.makedirs(nom_projet, exist_ok=True)
+                
+                # APPEL DU GÉNÉRATEUR AVEC LES WIDGETS LIVE
+                generateur.lancer_production_serie(
+                    chemin_video="temp_video.mp4",
+                    chemin_captions=script_choisi,
+                    dossier_sortie=nom_projet,
+                    n_to_make=nb_reels,
+                    modele_nom=nom_projet,
+                    progress_bar=bar,
+                    status_text=status_placeholder
+                )
+                
+                status.update(label="✅ PRODUCTION TERMINÉE !", state="complete", expanded=False)
+            
+            st.balloons()
+            st.success(f"Bravo ! Tes {nb_reels} vidéos sont prêtes dans l'onglet 'MES VIDÉOS'.")
+        else:
+            st.error("N'oublie pas d'ajouter une vidéo et un script !")
+
+# --- ONGLET 3 : MES VIDÉOS ---
+elif menu == "📂 MES VIDÉOS":
+    st.header("📂 Bibliothèque de Rendu")
+    dossiers = [d for d in os.listdir() if os.path.isdir(d) and not d.startswith(".")]
+    if dossiers:
+        projet = st.selectbox("Sélectionner un projet", dossiers)
+        fichiers = os.listdir(projet)
+        for f in fichiers:
+            if f.endswith(".mp4"):
+                col_a, col_b = st.columns([3, 1])
+                with col_a:
+                    st.write(f"🎞️ {f}")
+                with col_b:
+                    with open(os.path.join(projet, f), "rb") as file:
+                        st.download_button("Télécharger", file, file_name=f)
+    else:
+        st.write("Aucune production pour le moment.")
