@@ -47,25 +47,12 @@ st.markdown("""
 with st.sidebar:
     st.title("💎 OR-DUSINE PRO")
     st.markdown("---")
-    menu = st.radio("MENU NAVIGATION", ["✍️ ÉDITEUR CAPTIONS", "🚀 CENTRE DE PRODUCTION", "📂 MES VIDÉOS"])
+    menu = st.radio("MENU NAVIGATION", ["🚀 CENTRE DE PRODUCTION", "✍️ ÉDITEUR CAPTIONS", "📂 MES VIDÉOS"])
     st.markdown("---")
     st.info("Statut Serveur : ✅ Opérationnel")
 
-# --- ONGLET 1 : ÉDITEUR DE CAPTIONS ---
-if menu == "✍️ ÉDITEUR CAPTIONS":
-    st.header("✍️ Création de Scripts")
-    st.write("Règle : 1 Entrée = Ligne suivante | 2 Entrées = Espace | 3 Entrées = Nouvelle Vidéo")
-    
-    nom_script = st.text_input("Nom du script (ex: Campagne_Lundi)", "mon_script")
-    contenu_script = st.text_area("Colle ton texte ici...", height=300)
-    
-    if st.button("💾 SAUVEGARDER LE SCRIPT"):
-        with open(f"{nom_script}.txt", "w", encoding="utf-8") as f:
-            f.write(contenu_script)
-        st.success(f"Script '{nom_script}' prêt pour la production !")
-
-# --- ONGLET 2 : CENTRE DE PRODUCTION (DYNAMIQUE) ---
-elif menu == "🚀 CENTRE DE PRODUCTION":
+# --- ONGLET 1 : CENTRE DE PRODUCTION (DYNAMIQUE) ---
+if menu == "🚀 CENTRE DE PRODUCTION":
     st.header("🚀 Lancement de la Production")
     
     col1, col2 = st.columns(2)
@@ -73,18 +60,20 @@ elif menu == "🚀 CENTRE DE PRODUCTION":
         video_file = st.file_uploader("🎥 Vidéo de fond (MP4)", type=["mp4", "mov"])
     with col2:
         scripts = [f for f in os.listdir() if f.endswith(".txt")]
-        script_choisi = st.selectbox("📄 Choisir un Script", scripts)
+        if scripts:
+            script_choisi = st.selectbox("📄 Choisir un Script", scripts)
+        else:
+            st.warning("Aucun script trouvé. Va dans l'onglet 'ÉDITEUR CAPTIONS' pour en créer un !")
+            script_choisi = None
     
     nb_reels = st.number_input("Quantité de variantes à générer", min_value=1, max_value=50, value=5)
     nom_projet = st.text_input("Nom du projet", "Production_Alpha")
 
     if st.button("⚡ LANCER LA MACHINE"):
         if video_file and script_choisi:
-            # Sauvegarde temporaire de la vidéo uploadée
             with open("temp_video.mp4", "wb") as f:
                 f.write(video_file.read())
             
-            # --- ZONE DE SUIVI EN TEMPS RÉEL ---
             st.markdown("---")
             status_placeholder = st.empty()
             progress_placeholder = st.empty()
@@ -92,10 +81,8 @@ elif menu == "🚀 CENTRE DE PRODUCTION":
             with st.status("🏗️ Analyse et rendu en cours...", expanded=True) as status:
                 bar = progress_placeholder.progress(0)
                 
-                # Création du dossier de sortie si besoin
                 os.makedirs(nom_projet, exist_ok=True)
                 
-                # APPEL DU GÉNÉRATEUR AVEC LES WIDGETS LIVE
                 generateur.lancer_production_serie(
                     chemin_video="temp_video.mp4",
                     chemin_captions=script_choisi,
@@ -111,22 +98,78 @@ elif menu == "🚀 CENTRE DE PRODUCTION":
             st.balloons()
             st.success(f"Bravo ! Tes {nb_reels} vidéos sont prêtes dans l'onglet 'MES VIDÉOS'.")
         else:
-            st.error("N'oublie pas d'ajouter une vidéo et un script !")
+            st.error("N'oublie pas d'ajouter une vidéo et de sélectionner un script !")
+
+# --- ONGLET 2 : ÉDITEUR DE CAPTIONS ---
+elif menu == "✍️ ÉDITEUR CAPTIONS":
+    st.header("✍️ Gestion des Scripts")
+    st.write("Règle : 1 Entrée = Ligne suivante | 2 Entrées = Espace | 3 Entrées = Nouvelle Vidéo")
+    st.markdown("---")
+    
+    # 🚨 LA NOUVEAUTÉ : Le choix entre Créer ou Modifier
+    choix_action = st.radio("Que souhaites-tu faire ?", ["📝 Créer un nouveau script", "✏️ Modifier un script existant"])
+    
+    scripts_existants = [f for f in os.listdir() if f.endswith(".txt")]
+
+    if choix_action == "📝 Créer un nouveau script":
+        nom_script = st.text_input("Nom du script (sans le .txt)", "nouveau_script")
+        contenu_script = st.text_area("Colle ou tape ton texte ici...", height=300)
+        
+        if st.button("💾 SAUVEGARDER LE NOUVEAU SCRIPT"):
+            if nom_script and contenu_script:
+                with open(f"{nom_script}.txt", "w", encoding="utf-8") as f:
+                    f.write(contenu_script)
+                st.success(f"Script '{nom_script}.txt' sauvegardé et prêt à l'emploi !")
+            else:
+                st.warning("Il faut un nom et du texte pour sauvegarder !")
+
+    else: # Mode Modification
+        if scripts_existants:
+            script_a_modifier = st.selectbox("Sélectionne le script à charger :", scripts_existants)
+            
+            # On lit le fichier sélectionné
+            with open(script_a_modifier, "r", encoding="utf-8") as f:
+                contenu_actuel = f.read()
+            
+            nom_actuel = script_a_modifier.replace(".txt", "")
+            
+            nouveau_nom = st.text_input("Nom du script (tu peux le renommer)", nom_actuel)
+            nouveau_contenu = st.text_area("Modifie ton texte ici...", value=contenu_actuel, height=300)
+            
+            if st.button("💾 METTRE À JOUR LE SCRIPT"):
+                # Sauvegarde avec le (nouveau) nom
+                with open(f"{nouveau_nom}.txt", "w", encoding="utf-8") as f:
+                    f.write(nouveau_contenu)
+                
+                # Si l'utilisateur a changé le nom du fichier, on supprime l'ancien pour faire propre
+                if nouveau_nom != nom_actuel:
+                    os.remove(script_a_modifier)
+                    
+                st.success(f"Script '{nouveau_nom}.txt' mis à jour avec succès !")
+        else:
+            st.info("Aucun script n'est enregistré pour le moment. Crées-en un nouveau !")
 
 # --- ONGLET 3 : MES VIDÉOS ---
 elif menu == "📂 MES VIDÉOS":
     st.header("📂 Bibliothèque de Rendu")
-    dossiers = [d for d in os.listdir() if os.path.isdir(d) and not d.startswith(".")]
+    
+    dossiers_interdits = ["__pycache__", "CAPTIONS_STORAGE", "Output_Reels", "inputs", ".git"]
+    dossiers = [d for d in os.listdir() if os.path.isdir(d) and not d.startswith(".") and d not in dossiers_interdits]
+    
     if dossiers:
         projet = st.selectbox("Sélectionner un projet", dossiers)
         fichiers = os.listdir(projet)
-        for f in fichiers:
-            if f.endswith(".mp4"):
+        videos = [f for f in fichiers if f.endswith(".mp4")]
+        
+        if videos:
+            for f in videos:
                 col_a, col_b = st.columns([3, 1])
                 with col_a:
                     st.write(f"🎞️ {f}")
                 with col_b:
                     with open(os.path.join(projet, f), "rb") as file:
                         st.download_button("Télécharger", file, file_name=f)
+        else:
+            st.info("Ce projet est vide pour le moment.")
     else:
         st.write("Aucune production pour le moment.")
