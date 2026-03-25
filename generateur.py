@@ -3,7 +3,8 @@ import random
 import numpy as np
 import warnings
 import cv2
-import re  # <-- L'outil de lecture intelligent
+import re  # L'outil de lecture intelligent
+import textwrap # 🚨 NOUVEL OUTIL : Pour forcer le retour à la ligne !
 from datetime import datetime
 from PIL import Image, ImageFont
 from pilmoji import Pilmoji
@@ -16,7 +17,7 @@ face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_fronta
 
 def get_base_y_placement(video_path, canvas_h):
     safe_top = int(canvas_h * 0.22)
-    safe_bottom = int(canvas_h * 0.60)
+    safe_bottom = int(canvas_h * 0.68) # 🚨 On descend la zone basse par défaut
     fallback_y = safe_bottom 
 
     try:
@@ -42,13 +43,15 @@ def get_base_y_placement(video_path, canvas_h):
 def create_unique_text_sticker(text, reel_size, base_y):
     canvas_w, canvas_h = reel_size
     img = Image.new('RGBA', reel_size, (0, 0, 0, 0))
-    random_y_offset = random.randint(-15, 15)
-    final_y = base_y + random_y_offset
+    
+    # 🚨 LE GOLDEN SPOT : On force le texte vers le bas (68% de l'écran) pour esquiver la poitrine
+    final_y = int(canvas_h * 0.68) + random.randint(-15, 15)
     
     length = len(text.replace('\n', ' '))
     base_font_scale = canvas_w / 1080.0
 
-    font_size = int(110 * base_font_scale) if length < 15 else (int(80 * base_font_scale) if length < 50 else int(60 * base_font_scale))
+    # 🚨 TAILLE RÉDUITE : On écrit plus petit pour rester au centre
+    font_size = int(80 * base_font_scale) if length < 15 else (int(60 * base_font_scale) if length < 50 else int(45 * base_font_scale))
     font_size += random.randint(-3, 3)
 
     try: 
@@ -59,9 +62,8 @@ def create_unique_text_sticker(text, reel_size, base_y):
 
     with Pilmoji(img, source=AppleEmojiSource) as pilmoji:
         lines = []
-        max_w = int(canvas_w * 0.85)
         
-        # 🚨 LECTURE DES SAUTS DE LIGNE SIMPLES ET DOUBLES 🚨
+        # LECTURE DES SAUTS DE LIGNE
         paragraphes = text.split('\n')
         
         for para in paragraphes:
@@ -69,27 +71,27 @@ def create_unique_text_sticker(text, reel_size, base_y):
                 lines.append("") # Maintient la ligne vide visuelle
                 continue
                 
-            words = para.split()
-            line = ""
-            for w in words:
-                test = line + " " + w if line else w
-                if pilmoji.getsize(test, font=font)[0] < max_w: 
-                    line = test
-                else: 
-                    lines.append(line)
-                    line = w
-            if line:
-                lines.append(line)
+            # 🚨 LE BOUCLIER ANTI-LIKES : On coupe de force à 22 caractères max !
+            lignes_coupees = textwrap.wrap(para, width=22)
+            lines.extend(lignes_coupees)
         
-        stroke_w = max(2, int(4 * base_font_scale))
-        espacement = int(15 * base_font_scale)
+        # Contour noir bien épais pour que ça flashe
+        stroke_w = max(3, int(5 * base_font_scale))
+        espacement = int(10 * base_font_scale)
         total_h = len(lines) * (font_size + espacement)
+        
+        # On calcule où commencer à écrire pour que le bloc soit centré sur notre Golden Spot
         start_y = final_y - (total_h // 2)
 
         for l in lines:
             if l != "": 
+                # On utilise pilmoji.getsize pour gérer la largeur avec les Emojis
                 w_t = pilmoji.getsize(l, font=font)[0]
-                pilmoji.text(((canvas_w - w_t) // 2, start_y), l, font=font, 
+                
+                # On centre horizontalement
+                x = (canvas_w - w_t) // 2
+                
+                pilmoji.text((x, start_y), l, font=font, 
                              fill="white", stroke_width=stroke_w, stroke_fill="black")
             start_y += font_size + espacement
             
@@ -99,7 +101,6 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
     
     with open(chemin_captions, "r", encoding="utf-8") as f:
         contenu = f.read()
-        # 🚨 LA MAGIE EST ICI : On coupe uniquement s'il y a 3 "Entrées" (2 lignes vides) 🚨
         all_captions = [c.strip() for c in re.split(r'\n(?:[ \t]*\n){2,}', contenu) if c.strip()]
     
     if not all_captions:
@@ -113,7 +114,7 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
     for i in range(n_to_make):
         
         if stop_event and stop_event.is_set():
-            print("Arrêt de la production demandé par l'utilisateur.")
+            print("Arrêt de la production demandé.")
             break
 
         txt = all_captions[i % len(all_captions)]
@@ -158,9 +159,16 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
                               codec="libx264", audio_codec="aac", fps=24, logger=None,
                               ffmpeg_params=clean_params)
         
+        # 🚨 LE NETTOYEUR DE MÉMOIRE (INDISPENSABLE POUR NE PAS CRASHER) 🚨
+        final.close()
+        video_reel.close()
+        txt_clip.close()
+        del final, video_reel, txt_clip
+        
         reels_reussis += 1
         
         if progress_bar:
             progress_bar.progress(reels_reussis / n_to_make)
 
     clip_base.close()
+    del clip_base
