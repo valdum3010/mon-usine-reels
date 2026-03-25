@@ -3,7 +3,7 @@ import os
 import time
 import shutil 
 import generateur 
-from utilisateurs import USERS # 🚨 LA MAGIE EST ICI : On importe ta liste !
+from utilisateurs import USERS 
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="OR-DUSINE AI PRO", page_icon="💎", layout="wide")
@@ -31,6 +31,21 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # ==========================================
+# 🏗️ CRÉATEUR D'ESPACES PRIVÉS (NOUVEAU)
+# ==========================================
+def init_espace_prive(username):
+    # Crée un dossier principal au nom de l'utilisateur (ex: "Espace_admin")
+    dossier_base = f"Espace_{username}"
+    dossier_scripts = os.path.join(dossier_base, "Scripts")
+    dossier_modeles = os.path.join(dossier_base, "Modeles")
+    
+    # Si les dossiers n'existent pas encore, l'usine les construit
+    os.makedirs(dossier_scripts, exist_ok=True)
+    os.makedirs(dossier_modeles, exist_ok=True)
+    
+    return dossier_base, dossier_scripts, dossier_modeles
+
+# ==========================================
 # 🔐 SYSTÈME DE LOGIN MULTI-UTILISATEURS
 # ==========================================
 if "logged_in" not in st.session_state:
@@ -38,7 +53,6 @@ if "logged_in" not in st.session_state:
     st.session_state["current_user"] = ""
 
 def verifier_identifiants(username, password):
-    # 🚨 Le serveur vérifie directement dans ton dictionnaire USERS
     if username in USERS and USERS[username] == password:
         return True
     return False
@@ -62,8 +76,11 @@ if not st.session_state["logged_in"]:
             st.error("❌ Identifiant ou mot de passe incorrect. Accès refusé.")
     st.stop() 
 
+# --- INITIALISATION DES VARIABLES DE L'ESPACE PRIVÉ ---
+ws_base, ws_scripts, ws_modeles = init_espace_prive(st.session_state['current_user'])
+
 # ==========================================
-# 🌍 NAVIGATION (Seulement si connecté)
+# 🌍 NAVIGATION
 # ==========================================
 with st.sidebar:
     st.title("💎 OR-DUSINE PRO")
@@ -81,13 +98,14 @@ with st.sidebar:
 # ONGLET 1 : CENTRE DE PRODUCTION
 # ==========================================
 if menu == "🚀 CENTRE DE PRODUCTION":
-    st.header("🚀 Production par Modèle")
+    st.header(f"🚀 Production Privée ({st.session_state['current_user']})")
     
     col1, col2 = st.columns(2)
     with col1:
         video_file = st.file_uploader("🎥 Vidéo de fond (MP4)", type=["mp4", "mov"])
     with col2:
-        scripts = [f for f in os.listdir() if f.endswith(".txt") and f != "requirements.txt"]
+        # 🚨 L'usine ne cherche les scripts QUE dans le dossier secret de l'utilisateur !
+        scripts = [f for f in os.listdir(ws_scripts) if f.endswith(".txt")]
         if scripts:
             script_choisi = st.selectbox("📄 Choisir un Script", scripts)
         else:
@@ -103,7 +121,9 @@ if menu == "🚀 CENTRE DE PRODUCTION":
 
     if st.button("⚡ LANCER LA MACHINE", use_container_width=True):
         if video_file and script_choisi and nom_modele:
-            with open("temp_video.mp4", "wb") as f:
+            # On enregistre la vidéo dans l'espace privé
+            chemin_temp_video = os.path.join(ws_base, "temp_video.mp4")
+            with open(chemin_temp_video, "wb") as f:
                 f.write(video_file.read())
             
             st.markdown("---")
@@ -112,12 +132,18 @@ if menu == "🚀 CENTRE DE PRODUCTION":
             
             with st.status("🏗️ Analyse et rendu en cours...", expanded=True) as status:
                 bar = progress_placeholder.progress(0)
-                os.makedirs(nom_modele, exist_ok=True)
+                
+                # Le dossier de sortie du modèle est dans l'espace privé
+                chemin_sortie_modele = os.path.join(ws_modeles, nom_modele)
+                os.makedirs(chemin_sortie_modele, exist_ok=True)
+                
+                # Le script à lire est dans l'espace privé
+                chemin_script_complet = os.path.join(ws_scripts, script_choisi)
                 
                 generateur.lancer_production_serie(
-                    chemin_video="temp_video.mp4",
-                    chemin_captions=script_choisi,
-                    dossier_sortie=nom_modele,
+                    chemin_video=chemin_temp_video,
+                    chemin_captions=chemin_script_complet,
+                    dossier_sortie=chemin_sortie_modele,
                     n_to_make=nb_reels,
                     modele_nom=nom_modele,
                     progress_bar=bar,
@@ -126,7 +152,7 @@ if menu == "🚀 CENTRE DE PRODUCTION":
                 status.update(label="✅ PRODUCTION TERMINÉE !", state="complete", expanded=False)
             
             st.balloons()
-            st.success(f"Bravo ! Les vidéos pour {nom_modele} sont prêtes. Va dans 'GESTION DES MODÈLES' pour télécharger le ZIP !")
+            st.success(f"Bravo ! Les vidéos sont prêtes dans ton 'Drive des Modèles' privé.")
         else:
             st.error("N'oublie pas d'ajouter une vidéo, un script et un nom de modèle !")
 
@@ -134,12 +160,12 @@ if menu == "🚀 CENTRE DE PRODUCTION":
 # ONGLET 2 : ÉDITEUR DE CAPTIONS
 # ==========================================
 elif menu == "✍️ ÉDITEUR CAPTIONS":
-    st.header("✍️ Gestion des Scripts")
+    st.header(f"✍️ Gestion de tes Scripts ({st.session_state['current_user']})")
     st.write("Règle : 1 Entrée = Ligne suivante | 2 Entrées = Espace | 3 Entrées = Nouvelle Vidéo")
     st.markdown("---")
     
     choix_action = st.radio("Que souhaites-tu faire ?", ["📝 Créer un nouveau script", "✏️ Modifier / Supprimer un script existant"])
-    scripts_existants = [f for f in os.listdir() if f.endswith(".txt") and f != "requirements.txt"]
+    scripts_existants = [f for f in os.listdir(ws_scripts) if f.endswith(".txt")]
 
     if choix_action == "📝 Créer un nouveau script":
         nom_script = st.text_input("Nom du script (sans le .txt)", "nouveau_script")
@@ -147,9 +173,10 @@ elif menu == "✍️ ÉDITEUR CAPTIONS":
         
         if st.button("💾 SAUVEGARDER LE NOUVEAU SCRIPT", use_container_width=True):
             if nom_script and contenu_script:
-                with open(f"{nom_script}.txt", "w", encoding="utf-8") as f:
+                chemin_sauvegarde = os.path.join(ws_scripts, f"{nom_script}.txt")
+                with open(chemin_sauvegarde, "w", encoding="utf-8") as f:
                     f.write(contenu_script)
-                st.success(f"Script '{nom_script}.txt' sauvegardé !")
+                st.success(f"Script sauvegardé dans ton espace privé !")
                 time.sleep(1)
                 st.rerun()
             else:
@@ -158,7 +185,9 @@ elif menu == "✍️ ÉDITEUR CAPTIONS":
     else:
         if scripts_existants:
             script_a_modifier = st.selectbox("Sélectionne le script :", scripts_existants)
-            with open(script_a_modifier, "r", encoding="utf-8") as f:
+            chemin_script_actuel = os.path.join(ws_scripts, script_a_modifier)
+            
+            with open(chemin_script_actuel, "r", encoding="utf-8") as f:
                 contenu_actuel = f.read()
             nom_actuel = script_a_modifier.replace(".txt", "")
             
@@ -168,16 +197,18 @@ elif menu == "✍️ ÉDITEUR CAPTIONS":
             colA, colB = st.columns(2)
             with colA:
                 if st.button("💾 METTRE À JOUR", use_container_width=True):
-                    with open(f"{nouveau_nom}.txt", "w", encoding="utf-8") as f:
+                    chemin_nouveau = os.path.join(ws_scripts, f"{nouveau_nom}.txt")
+                    with open(chemin_nouveau, "w", encoding="utf-8") as f:
                         f.write(nouveau_contenu)
+                    
                     if nouveau_nom != nom_actuel:
-                        os.remove(script_a_modifier)
+                        os.remove(chemin_script_actuel)
                     st.success("Script mis à jour !")
                     time.sleep(1)
                     st.rerun()
             with colB:
                 if st.button("🗑️ SUPPRIMER CE SCRIPT", use_container_width=True):
-                    os.remove(script_a_modifier)
+                    os.remove(chemin_script_actuel)
                     st.error("Script supprimé définitivement !")
                     time.sleep(1)
                     st.rerun()
@@ -185,16 +216,18 @@ elif menu == "✍️ ÉDITEUR CAPTIONS":
             st.info("Aucun script enregistré. Crées-en un nouveau !")
 
 # ==========================================
-# ONGLET 3 : GESTION DES MODÈLES (LE "DRIVE")
+# ONGLET 3 : GESTION DES MODÈLES (LE "DRIVE" PRIVÉ)
 # ==========================================
 elif menu == "📂 GESTION DES MODÈLES":
-    st.header("📂 Le Drive des Modèles")
+    st.header(f"📂 Ton Drive Privé ({st.session_state['current_user']})")
     
-    dossiers_interdits = ["__pycache__", "CAPTIONS_STORAGE", "Output_Reels", "inputs", ".git"]
-    modeles = [d for d in os.listdir() if os.path.isdir(d) and not d.startswith(".") and d not in dossiers_interdits]
+    # On ne regarde plus les dossiers à la racine, mais SEULEMENT dans le dossier "Modeles" du client
+    modeles = [d for d in os.listdir(ws_modeles) if os.path.isdir(os.path.join(ws_modeles, d))]
     
     if modeles:
         modele_choisi = st.selectbox("Sélectionner un Modèle :", modeles)
+        chemin_modele = os.path.join(ws_modeles, modele_choisi)
+        chemin_zip = os.path.join(ws_modeles, f"{modele_choisi}.zip")
         
         with st.expander("⚙️ Options du Modèle (Exporter en ZIP / Renommer / Supprimer)", expanded=False):
             col_zip, col_edit1, col_edit2 = st.columns(3)
@@ -203,11 +236,12 @@ elif menu == "📂 GESTION DES MODÈLES":
                 st.write("📦 Exporter toutes les vidéos :")
                 if st.button("1. Préparer le fichier .ZIP", use_container_width=True):
                     with st.spinner("Compression en cours..."):
-                        shutil.make_archive(modele_choisi, 'zip', modele_choisi)
+                        # Compresse uniquement le dossier privé du modèle
+                        shutil.make_archive(chemin_modele, 'zip', chemin_modele)
                     st.success("✅ ZIP prêt !")
                 
-                if os.path.exists(f"{modele_choisi}.zip"):
-                    with open(f"{modele_choisi}.zip", "rb") as f:
+                if os.path.exists(chemin_zip):
+                    with open(chemin_zip, "rb") as f:
                         st.download_button(
                             label="2. 📥 TÉLÉCHARGER LE ZIP", 
                             data=f, 
@@ -221,8 +255,9 @@ elif menu == "📂 GESTION DES MODÈLES":
                 nouveau_nom_modele = st.text_input("", value=modele_choisi, label_visibility="collapsed")
                 if st.button("Renommer le Modèle", use_container_width=True):
                     if nouveau_nom_modele != modele_choisi:
-                        os.rename(modele_choisi, nouveau_nom_modele)
-                        if os.path.exists(f"{modele_choisi}.zip"): os.remove(f"{modele_choisi}.zip")
+                        nouveau_chemin = os.path.join(ws_modeles, nouveau_nom_modele)
+                        os.rename(chemin_modele, nouveau_chemin)
+                        if os.path.exists(chemin_zip): os.remove(chemin_zip)
                         st.success("Nom mis à jour !")
                         time.sleep(1)
                         st.rerun()
@@ -231,9 +266,8 @@ elif menu == "📂 GESTION DES MODÈLES":
                 st.write("🗑️ Nettoyage complet :")
                 st.write("") 
                 if st.button("Supprimer TOUT le Modèle", use_container_width=True):
-                    shutil.rmtree(modele_choisi)
-                    if os.path.exists(f"{modele_choisi}.zip"):
-                        os.remove(f"{modele_choisi}.zip")
+                    shutil.rmtree(chemin_modele)
+                    if os.path.exists(chemin_zip): os.remove(chemin_zip)
                     st.error(f"Le modèle {modele_choisi} a été supprimé !")
                     time.sleep(1)
                     st.rerun()
@@ -241,22 +275,23 @@ elif menu == "📂 GESTION DES MODÈLES":
         st.markdown("---")
         st.subheader(f"🎞️ Vidéos individuelles de {modele_choisi}")
         
-        fichiers = os.listdir(modele_choisi)
+        fichiers = os.listdir(chemin_modele)
         videos = [f for f in fichiers if f.endswith(".mp4")]
         
         if videos:
             for f in videos:
+                chemin_video_seule = os.path.join(chemin_modele, f)
                 col_vid, col_down, col_del = st.columns([6, 2, 2])
                 with col_vid:
                     st.write(f"▶️ {f}")
                 with col_down:
-                    with open(os.path.join(modele_choisi, f), "rb") as file:
+                    with open(chemin_video_seule, "rb") as file:
                         st.download_button("📥 Télécharger", file, file_name=f, key=f"dl_{f}", use_container_width=True)
                 with col_del:
                     if st.button("🗑️ Effacer", key=f"del_{f}", use_container_width=True):
-                        os.remove(os.path.join(modele_choisi, f))
+                        os.remove(chemin_video_seule)
                         st.rerun()
         else:
             st.info("Ce modèle n'a aucune vidéo générée pour le moment.")
     else:
-        st.write("Aucun modèle enregistré dans l'usine.")
+        st.write("Aucun modèle enregistré dans ton Drive privé.")
