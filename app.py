@@ -39,7 +39,7 @@ if "logged_in" not in st.session_state:
 def verifier_identifiants(username, password):
     try:
         # Lecture du fichier de mots de passe
-        with open("utilisateurs.txt", "r", encoding="utf-8") as f:
+        with open("utilisateurs.py", "r", encoding="utf-8") as f:
             lignes = f.readlines()
             for ligne in lignes:
                 if ":" in ligne:
@@ -48,7 +48,7 @@ def verifier_identifiants(username, password):
                         return True
         return False
     except FileNotFoundError:
-        st.error("🚨 ERREUR : Le fichier 'utilisateurs.txt' est introuvable. Crée-le sur ton serveur !")
+        st.error("🚨 ERREUR : Le fichier 'utilisateurs.py' est introuvable. Crée-le sur ton serveur !")
         return False
 
 if not st.session_state["logged_in"]:
