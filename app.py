@@ -2,7 +2,8 @@ import streamlit as st
 import os
 import time
 import shutil 
-import generateur # Ton fichier qui fabrique les vidéos
+import generateur 
+from utilisateurs import USERS # 🚨 LA MAGIE EST ICI : On importe ta liste !
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="OR-DUSINE AI PRO", page_icon="💎", layout="wide")
@@ -37,19 +38,10 @@ if "logged_in" not in st.session_state:
     st.session_state["current_user"] = ""
 
 def verifier_identifiants(username, password):
-    try:
-        # Lecture du fichier de mots de passe
-        with open("utilisateurs.py", "r", encoding="utf-8") as f:
-            lignes = f.readlines()
-            for ligne in lignes:
-                if ":" in ligne:
-                    user_file, pwd_file = ligne.strip().split(":", 1)
-                    if username == user_file and password == pwd_file:
-                        return True
-        return False
-    except FileNotFoundError:
-        st.error("🚨 ERREUR : Le fichier 'utilisateurs.py' est introuvable. Crée-le sur ton serveur !")
-        return False
+    # 🚨 Le serveur vérifie directement dans ton dictionnaire USERS
+    if username in USERS and USERS[username] == password:
+        return True
+    return False
 
 if not st.session_state["logged_in"]:
     st.title("🔐 Accès Restreint : OR-DUSINE PRO")
@@ -68,7 +60,7 @@ if not st.session_state["logged_in"]:
             st.rerun()
         else:
             st.error("❌ Identifiant ou mot de passe incorrect. Accès refusé.")
-    st.stop() # Bloque l'accès au reste si on n'est pas connecté
+    st.stop() 
 
 # ==========================================
 # 🌍 NAVIGATION (Seulement si connecté)
@@ -95,7 +87,7 @@ if menu == "🚀 CENTRE DE PRODUCTION":
     with col1:
         video_file = st.file_uploader("🎥 Vidéo de fond (MP4)", type=["mp4", "mov"])
     with col2:
-        scripts = [f for f in os.listdir() if f.endswith(".txt") and f != "utilisateurs.txt"]
+        scripts = [f for f in os.listdir() if f.endswith(".txt") and f != "requirements.txt"]
         if scripts:
             script_choisi = st.selectbox("📄 Choisir un Script", scripts)
         else:
@@ -147,7 +139,7 @@ elif menu == "✍️ ÉDITEUR CAPTIONS":
     st.markdown("---")
     
     choix_action = st.radio("Que souhaites-tu faire ?", ["📝 Créer un nouveau script", "✏️ Modifier / Supprimer un script existant"])
-    scripts_existants = [f for f in os.listdir() if f.endswith(".txt") and f != "utilisateurs.txt"]
+    scripts_existants = [f for f in os.listdir() if f.endswith(".txt") and f != "requirements.txt"]
 
     if choix_action == "📝 Créer un nouveau script":
         nom_script = st.text_input("Nom du script (sans le .txt)", "nouveau_script")
@@ -198,7 +190,6 @@ elif menu == "✍️ ÉDITEUR CAPTIONS":
 elif menu == "📂 GESTION DES MODÈLES":
     st.header("📂 Le Drive des Modèles")
     
-    # Sécurité anti-dossiers techniques
     dossiers_interdits = ["__pycache__", "CAPTIONS_STORAGE", "Output_Reels", "inputs", ".git"]
     modeles = [d for d in os.listdir() if os.path.isdir(d) and not d.startswith(".") and d not in dossiers_interdits]
     
