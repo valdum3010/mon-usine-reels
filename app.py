@@ -102,7 +102,7 @@ if menu == "🚀 CENTRE DE PRODUCTION":
     
     col1, col2 = st.columns(2)
     with col1:
-        video_file = st.file_uploader("🎥 Vidéo de fond ou Pack ZIP", type=["mp4", "mov", "zip"])
+        video_files = st.file_uploader("🎥 Glisse tes vidéos ici (Tu peux en mettre plusieurs !)", type=["mp4", "mov"], accept_multiple_files=True)
     with col2:
         # 🚨 L'usine ne cherche les scripts QUE dans le dossier secret de l'utilisateur !
         scripts = [f for f in os.listdir(ws_scripts) if f.endswith(".txt")]
@@ -120,44 +120,28 @@ if menu == "🚀 CENTRE DE PRODUCTION":
         nom_modele = st.text_input("Nom du Modèle (ex: Chloe_OF, Emma_Tiktok...)", "Nouveau_Modele")
 
     if st.button("⚡ LANCER LA MACHINE", use_container_width=True):
-        if video_file is not None:
-            import zipfile
-            import shutil
-
-            # 1. CAS DU PACK ZIP (BULK)
-            if video_file.name.endswith('.zip'):
-                # On crée un dossier temporaire pour extraire
-                temp_dir = "temp_bulk"
-                if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
-                os.makedirs(temp_dir)
-
-                with zipfile.ZipFile(video_file, 'r') as z:
-                    z.extractall(temp_dir)
+        if video_files: # Si tu as mis au moins une vidéo
+            progress_bar = st.progress(0)
+            st.info(f"🚀 Production lancée pour {len(video_files)} vidéos...")
+            
+            for i, video_file in enumerate(video_files):
+                st.write(f"⚙️ Traitement de la vidéo {i+1}...")
                 
-                # On liste tous les fichiers media dans le ZIP
-                fichiers = [f for f in os.listdir(temp_dir) if f.lower().endswith(('.mp4', '.mov', '.png', '.jpg'))]
+                # On lance ta machine pour CHAQUE vidéo
+                generateur.lancer_production_serie(
+                    chemin_video=video_file,
+                    # ⚠️ ATTENTION : L'erreur de tout à l'heure vient d'ici 👇
+                    script_nom=script_choisi, 
+                    nb_variantes=nb_reels,
+                    nom_modele=f"{nom_modele}_{i+1}",
+                    status_text=st.empty()
+                )
+                progress_bar.progress((i + 1) / len(video_files))
                 
-                if not fichiers:
-                    st.error("❌ Aucune vidéo ou photo trouvée dans le ZIP.")
-                else:
-                    progress_bar = st.progress(0)
-                    st.info(f"🚀 Mode BULK : {len(fichiers)} fichiers à traiter...")
-                    
-                    for i, nom_fich in enumerate(fichiers):
-                        chemin_complet = os.path.join(temp_dir, nom_fich)
-                        
-                        # Appel de ton moteur de production
-                        generateur.lancer_production_serie(
-                            chemin_video=chemin_complet,
-                            script_nom=script_choisi,
-                            nb_variantes=nb_reels,
-                            nom_modele=f"{nom_modele}_{i+1}",
-                            status_text=st.empty()
-                        )
-                        progress_bar.progress((i + 1) / len(fichiers))
-                    
-                    st.success("✅ Pack terminé ! Toutes les vidéos sont dans 'sorties'.")
-                    st.balloons()
+            st.success("✅ Toutes les vidéos ont été générées !")
+            st.balloons()
+        else:
+            st.error("⚠️ N'oublie pas de glisser au moins une vidéo !")
 
             # 2. CAS D'UN SEUL FICHIER (NORMAL)
             else:
