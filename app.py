@@ -124,36 +124,41 @@ if menu == "🚀 CENTRE DE PRODUCTION":
             progress_bar = st.progress(0)
             st.info(f"🚀 Production lancée pour {len(video_files)} vidéos...")
             
+            # 1. On prépare le dossier de sortie pour ranger les vidéos terminées
+            dossier_sortie_modele = os.path.join(ws_modeles, nom_modele)
+            os.makedirs(dossier_sortie_modele, exist_ok=True)
+            
+            # 2. On récupère le chemin exact du fichier texte
+            chemin_script_complet = os.path.join(ws_scripts, script_choisi)
+            
             for i, video_file in enumerate(video_files):
                 st.write(f"⚙️ Traitement de la vidéo {i+1}...")
                 
-                # On lance ta machine pour CHAQUE vidéo
+                # 3. On sauvegarde la vidéo temporairement pour que MoviePy puisse la lire
+                temp_video_path = f"temp_video_{i}.mp4"
+                with open(temp_video_path, "wb") as f:
+                    f.write(video_file.read())
+                
+                # 4. Lancement de l'usine avec les BONS mots-clés
                 generateur.lancer_production_serie(
-                    chemin_video=video_file,
-                    # ⚠️ ATTENTION : L'erreur de tout à l'heure vient d'ici 👇
-                    script_nom=script_choisi, 
-                    nb_variantes=nb_reels,
-                    nom_modele=f"{nom_modele}_{i+1}",
+                    chemin_video=temp_video_path,           # La vidéo sauvegardée
+                    chemin_captions=chemin_script_complet,  # Le script exact
+                    dossier_sortie=dossier_sortie_modele,   # Le dossier de rangement
+                    n_to_make=nb_reels,                     # La quantité demandée
+                    modele_nom=f"{nom_modele}_{i+1}",       # Le nom de la variante
                     status_text=st.empty()
                 )
+                
+                # 5. On supprime la vidéo temporaire pour ne pas polluer le serveur
+                if os.path.exists(temp_video_path):
+                    os.remove(temp_video_path)
+                    
                 progress_bar.progress((i + 1) / len(video_files))
                 
-            st.success("✅ Toutes les vidéos ont été générées !")
+            st.success("✅ Toutes les vidéos ont été générées et sont dans ton Drive !")
             st.balloons()
         else:
             st.error("⚠️ N'oublie pas de glisser au moins une vidéo !")
-
-            # 2. CAS D'UN SEUL FICHIER (NORMAL)
-            else:
-                generateur.lancer_production_serie(
-                    chemin_video=video_file,
-                    script_nom=script_choisi,
-                    nb_variantes=nb_reels,
-                    nom_modele=nom_modele,
-                    status_text=st.empty()
-                )
-        else:
-            st.error("⚠️ Oublie pas de mettre une vidéo ou un ZIP !")
 
 # ==========================================
 # ONGLET 2 : ÉDITEUR DE CAPTIONS
