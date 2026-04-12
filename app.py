@@ -102,7 +102,7 @@ if menu == "🚀 CENTRE DE PRODUCTION":
     
     col1, col2 = st.columns(2)
     with col1:
-        video_file = st.file_uploader("🎥 Vidéo de fond (MP4)", type=["mp4", "mov"])
+        video_file = st.file_uploader("🎥 Vidéo de fond ou Pack ZIP", type=["mp4", "mov", "zip"])
     with col2:
         # 🚨 L'usine ne cherche les scripts QUE dans le dossier secret de l'utilisateur !
         scripts = [f for f in os.listdir(ws_scripts) if f.endswith(".txt")]
@@ -120,41 +120,56 @@ if menu == "🚀 CENTRE DE PRODUCTION":
         nom_modele = st.text_input("Nom du Modèle (ex: Chloe_OF, Emma_Tiktok...)", "Nouveau_Modele")
 
     if st.button("⚡ LANCER LA MACHINE", use_container_width=True):
-        if video_file and script_choisi and nom_modele:
-            # On enregistre la vidéo dans l'espace privé
-            chemin_temp_video = os.path.join(ws_base, "temp_video.mp4")
-            with open(chemin_temp_video, "wb") as f:
-                f.write(video_file.read())
-            
-            st.markdown("---")
-            status_placeholder = st.empty()
-            progress_placeholder = st.empty()
-            
-            with st.status("🏗️ Analyse et rendu en cours...", expanded=True) as status:
-                bar = progress_placeholder.progress(0)
+        if video_file is not None:
+            import zipfile
+            import shutil
+
+            # 1. CAS DU PACK ZIP (BULK)
+            if video_file.name.endswith('.zip'):
+                # On crée un dossier temporaire pour extraire
+                temp_dir = "temp_bulk"
+                if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
+                os.makedirs(temp_dir)
+
+                with zipfile.ZipFile(video_file, 'r') as z:
+                    z.extractall(temp_dir)
                 
-                # Le dossier de sortie du modèle est dans l'espace privé
-                chemin_sortie_modele = os.path.join(ws_modeles, nom_modele)
-                os.makedirs(chemin_sortie_modele, exist_ok=True)
+                # On liste tous les fichiers media dans le ZIP
+                fichiers = [f for f in os.listdir(temp_dir) if f.lower().endswith(('.mp4', '.mov', '.png', '.jpg'))]
                 
-                # Le script à lire est dans l'espace privé
-                chemin_script_complet = os.path.join(ws_scripts, script_choisi)
-                
+                if not fichiers:
+                    st.error("❌ Aucune vidéo ou photo trouvée dans le ZIP.")
+                else:
+                    progress_bar = st.progress(0)
+                    st.info(f"🚀 Mode BULK : {len(fichiers)} fichiers à traiter...")
+                    
+                    for i, nom_fich in enumerate(fichiers):
+                        chemin_complet = os.path.join(temp_dir, nom_fich)
+                        
+                        # Appel de ton moteur de production
+                        generateur.lancer_production_serie(
+                            chemin_video=chemin_complet,
+                            script_nom=script_choisi,
+                            nb_variantes=nb_reels,
+                            nom_modele=f"{nom_modele}_{i+1}",
+                            status_text=st.empty()
+                        )
+                        progress_bar.progress((i + 1) / len(fichiers))
+                    
+                    st.success("✅ Pack terminé ! Toutes les vidéos sont dans 'sorties'.")
+                    st.balloons()
+
+            # 2. CAS D'UN SEUL FICHIER (NORMAL)
+            else:
                 generateur.lancer_production_serie(
-                    chemin_video=chemin_temp_video,
-                    chemin_captions=chemin_script_complet,
-                    dossier_sortie=chemin_sortie_modele,
-                    n_to_make=nb_reels,
-                    modele_nom=nom_modele,
-                    progress_bar=bar,
-                    status_text=status_placeholder
+                    chemin_video=video_file,
+                    script_nom=script_choisi,
+                    nb_variantes=nb_reels,
+                    nom_modele=nom_modele,
+                    status_text=st.empty()
                 )
-                status.update(label="✅ PRODUCTION TERMINÉE !", state="complete", expanded=False)
-            
-            st.balloons()
-            st.success(f"Bravo ! Les vidéos sont prêtes dans ton 'Drive des Modèles' privé.")
         else:
-            st.error("N'oublie pas d'ajouter une vidéo, un script et un nom de modèle !")
+            st.error("⚠️ Oublie pas de mettre une vidéo ou un ZIP !")
 
 # ==========================================
 # ONGLET 2 : ÉDITEUR DE CAPTIONS
