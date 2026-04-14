@@ -10,12 +10,13 @@ from datetime import datetime, timedelta
 from PIL import Image, ImageFont
 from pilmoji import Pilmoji
 from pilmoji.source import AppleEmojiSource
-from multiprocessing import Pool, cpu_count
-from moviepy import VideoFileClip, ImageClip, CompositeVideoClip, vfx
 
 warnings.filterwarnings("ignore")
 
+from moviepy import VideoFileClip, ImageClip, CompositeVideoClip, vfx
+
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
 
 # ============================================================
 # 🎯 DÉTECTION DE VISAGE
@@ -29,25 +30,21 @@ def get_base_y_placement(video_path, canvas_h):
         cap = cv2.VideoCapture(video_path)
         ret, frame = cap.read()
         cap.release()
-        if not ret:
-            return fallback_y
+        if not ret: return fallback_y
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = face_cascade.detectMultiScale(gray, 1.1, 3)
         if len(faces) > 0:
             (x, y, w, h) = faces[0]
-            face_y = (y + h / 2) * (canvas_h / frame.shape[0])
-            if face_y < canvas_h * 0.5:
-                return safe_bottom
-            else:
-                return safe_top
+            face_y = (y + h/2) * (canvas_h / frame.shape[0])
+            if face_y < canvas_h * 0.5: return safe_bottom
+            else: return safe_top
         return fallback_y
-    except:
-        pass
+    except: pass
     return fallback_y
 
 
 # ============================================================
-# 🎨 VARIATION 1 : Style du texte
+# 🎨 VARIATION STYLE TEXTE
 # ============================================================
 
 def varier_style_texte():
@@ -76,11 +73,7 @@ def create_unique_text_sticker(text, reel_size, base_y, couleur=(255, 255, 255),
     length = len(text.replace('\n', ' '))
     base_font_scale = canvas_w / 1080.0
 
-    font_size = (
-        int(80 * base_font_scale) if length < 15
-        else int(60 * base_font_scale) if length < 50
-        else int(45 * base_font_scale)
-    )
+    font_size = int(80 * base_font_scale) if length < 15 else (int(60 * base_font_scale) if length < 50 else int(45 * base_font_scale))
     font_size += random.randint(-3, 3)
 
     try:
@@ -107,82 +100,15 @@ def create_unique_text_sticker(text, reel_size, base_y, couleur=(255, 255, 255),
             if l != "":
                 w_t = pilmoji.getsize(l, font=font)[0]
                 x = (canvas_w - w_t) // 2
-                pilmoji.text(
-                    (x, start_y), l,
-                    font=font,
-                    fill=couleur,
-                    stroke_width=stroke_w,
-                    stroke_fill="black"
-                )
+                pilmoji.text((x, start_y), l, font=font,
+                    fill=couleur, stroke_width=stroke_w, stroke_fill="black")
             start_y += font_size + espacement
 
     return np.array(img)
 
 
 # ============================================================
-# 🔄 VARIATION 2 : Effets visuels
-# ============================================================
-
-def appliquer_variations_visuelles(clip, index):
-    effets = []
-
-    if index % 2 == 0:
-        effets.append(vfx.MirrorX())
-
-    try:
-        effets.append(vfx.Colorx(random.uniform(0.97, 1.03)))
-    except:
-        pass
-
-    try:
-        angle = random.uniform(-0.6, 0.6)
-        effets.append(vfx.Rotate(angle))
-    except:
-        pass
-
-    if effets:
-        clip = clip.with_effects(effets)
-
-    try:
-        speed_factor = random.uniform(0.98, 1.02)
-        clip = clip.with_speed_scaled(speed_factor)
-    except:
-        pass
-
-    return clip
-
-
-# ============================================================
-# ✂️ VARIATION 3 : Recadrage aléatoire
-# ============================================================
-
-def recadrage_aleatoire(clip):
-    w, h = clip.w, clip.h
-    offset_x = random.randint(-int(w * 0.02), int(w * 0.02))
-    offset_y = random.randint(-int(h * 0.02), int(h * 0.02))
-    zoom = random.uniform(1.02, 1.05)
-    clip = clip.resized(zoom)
-    clip = clip.cropped(
-        x_center=(clip.w / 2) + offset_x,
-        y_center=(clip.h / 2) + offset_y,
-        width=w,
-        height=h
-    )
-    return clip
-
-
-# ============================================================
-# 🎞️ VARIATION 4 : Paramètres d'encodage
-# ============================================================
-
-def get_encoding_params():
-    bitrate = random.choice(["3800k", "4000k", "4200k", "4500k", "4700k"])
-    fps = random.choice([23.976, 24, 25, 29.97])
-    return bitrate, fps
-
-
-# ============================================================
-# 🧹 VARIATION 5 : Métadonnées falsifiées
+# 🧹 MÉTADONNÉES FALSIFIÉES
 # ============================================================
 
 def get_clean_ffmpeg_params():
@@ -194,7 +120,6 @@ def get_clean_ffmpeg_params():
     fake_date_str = fake_date.strftime("%Y-%m-%dT%H:%M:%S")
     unique_id = uuid.uuid4().hex[:12]
     encoder_version = f"{random.randint(1,9)}.{random.randint(0,9)}.{random.randint(0,99)}"
-
     return [
         "-map_metadata", "-1",
         "-metadata", f"comment=EditID_{unique_id}",
@@ -205,61 +130,98 @@ def get_clean_ffmpeg_params():
 
 
 # ============================================================
-# ⚙️ WORKER MULTIPROCESSING (1 tâche = 1 cœur)
+# 🏭 MOTEUR PRINCIPAL
 # ============================================================
 
-def worker_generer_reel(args):
-    """
-    Fonction exécutée par chaque cœur CPU en parallèle.
-    Chaque worker génère UNE variante de façon totalement indépendante.
-    """
-    (
-        chemin_video,
-        txt,
-        dossier_sortie,
-        modele_nom,
-        index,
-        base_w,
-        base_h,
-        base_y
-    ) = args
+def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_make, modele_nom, progress_bar=None, status_text=None, stop_event=None):
 
-    try:
-        # Chaque worker charge sa propre instance du clip
-        clip_base = VideoFileClip(chemin_video)
+    with open(chemin_captions, "r", encoding="utf-8") as f:
+        contenu = f.read()
 
-        # --- Effets visuels ---
-        video_reel = appliquer_variations_visuelles(clip_base, index)
+    all_captions = [c.strip() for c in re.split(r'\n(?:[ \t]*\n){2,}', contenu) if c.strip()]
+    if not all_captions:
+        all_captions = ["Texte par défaut"]
 
-        # --- Recadrage unique ---
-        video_reel = recadrage_aleatoire(video_reel)
+    clip_base = VideoFileClip(chemin_video)
+    base_y = get_base_y_placement(chemin_video, clip_base.h)
 
-        # --- Coupure début + fin ---
+    reels_reussis = 0
+
+    for i in range(n_to_make):
+        if stop_event and stop_event.is_set():
+            print("Arrêt de la production demandé.")
+            break
+
+        txt = all_captions[i % len(all_captions)]
+
+        if status_text:
+            status_text.text(f"⚡ [{i+1}/{n_to_make}] Production de la variante : {txt[:20]}...")
+
+        # --- PACK ANTI-BAN AMÉLIORÉ ---
+
+        # 1. Zoom + recadrage aléatoire
+        zoom_factor = random.uniform(1.02, 1.05)
+        video_reel = clip_base.resized(zoom_factor)
+
+        # 2. Décalage du crop (unique à chaque variante)
+        offset_x = random.randint(-int(clip_base.w * 0.02), int(clip_base.w * 0.02))
+        offset_y = random.randint(-int(clip_base.h * 0.02), int(clip_base.h * 0.02))
+        video_reel = video_reel.cropped(
+            x_center=(video_reel.w / 2) + offset_x,
+            y_center=(video_reel.h / 2) + offset_y,
+            width=clip_base.w,
+            height=clip_base.h
+        )
+
+        # 3. Effets visuels variés
+        active_effects = []
+        if i % 2 == 0:
+            active_effects.append(vfx.MirrorX())
+        try:
+            active_effects.append(vfx.Colorx(random.uniform(0.97, 1.03)))
+        except:
+            pass
+        try:
+            active_effects.append(vfx.Rotate(random.uniform(-0.6, 0.6)))
+        except:
+            pass
+        if active_effects:
+            video_reel = video_reel.with_effects(active_effects)
+
+        # 4. Variation de vitesse légère
+        try:
+            video_reel = video_reel.with_speed_scaled(random.uniform(0.98, 1.02))
+        except:
+            pass
+
+        # 5. Coupure début ET fin aléatoire
         cut_start = random.uniform(0.0, 0.15)
         cut_end = random.uniform(0.05, 0.25)
         if video_reel.duration > (cut_start + cut_end + 0.5):
             video_reel = video_reel.subclipped(cut_start, video_reel.duration - cut_end)
 
-        # --- Texte varié ---
+        # 6. Texte avec style varié
         couleur, stroke, y_offset = varier_style_texte()
         txt_img = create_unique_text_sticker(
             txt,
-            (base_w, base_h),
+            (clip_base.w, clip_base.h),
             base_y + y_offset,
             couleur=couleur,
             stroke_w=stroke
         )
         txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
 
-        # --- Encodage varié ---
-        bitrate, fps = get_encoding_params()
+        # 7. Encodage varié
+        bitrate = random.choice(["3800k", "4000k", "4200k", "4500k", "4700k"])
+        fps = random.choice([23.976, 24, 25, 29.97])
+
         final = CompositeVideoClip([video_reel, txt_clip])
 
-        output_name = f"{modele_nom}_Reel_{index+1}_v{uuid.uuid4().hex[:6]}.mp4"
-        output_path = os.path.join(dossier_sortie, output_name)
+        # 8. Nom de fichier unique
+        output_name = f"{modele_nom}_Reel_{i+1}_v{uuid.uuid4().hex[:6]}.mp4"
 
         final.write_videofile(
-            output_path,
+            os.path.join(dossier_sortie, output_name),
             codec="libx264",
             audio_codec="aac",
             fps=fps,
@@ -268,81 +230,16 @@ def worker_generer_reel(args):
             ffmpeg_params=get_clean_ffmpeg_params()
         )
 
-        # --- Nettoyage mémoire ---
+        # Nettoyage mémoire
         final.close()
         video_reel.close()
         txt_clip.close()
-        clip_base.close()
-        del final, video_reel, txt_clip, clip_base
+        del final, video_reel, txt_clip
 
-        return True, output_name
+        reels_reussis += 1
 
-    except Exception as e:
-        return False, str(e)
+        if progress_bar:
+            progress_bar.progress(reels_reussis / n_to_make)
 
-
-# ============================================================
-# 🏭 MOTEUR PRINCIPAL — MULTIPROCESSING 4 CŒURS
-# ============================================================
-
-def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie,
-                             n_to_make, modele_nom,
-                             progress_bar=None, status_text=None, stop_event=None):
-
-    # --- Lecture des captions ---
-    with open(chemin_captions, "r", encoding="utf-8") as f:
-        contenu = f.read()
-
-    all_captions = [c.strip() for c in re.split(r'\n(?:[ \t]*\n){2,}', contenu) if c.strip()]
-    if not all_captions:
-        all_captions = ["Texte par défaut"]
-
-    # --- Pré-chargement UNE SEULE FOIS pour récupérer dimensions + position visage ---
-    clip_info = VideoFileClip(chemin_video)
-    base_w = clip_info.w
-    base_h = clip_info.h
-    base_y = get_base_y_placement(chemin_video, base_h)
-    clip_info.close()
-    del clip_info
-
-    # --- Préparation des tâches ---
-    taches = []
-    for i in range(n_to_make):
-        txt = all_captions[i % len(all_captions)]
-        taches.append((
-            chemin_video,
-            txt,
-            dossier_sortie,
-            modele_nom,
-            i,
-            base_w,
-            base_h,
-            base_y
-        ))
-
-    # --- Lancement en parallèle sur 4 cœurs max ---
-    nb_coeurs = min(4, cpu_count())
-
-    if status_text:
-        status_text.text(f"⚡ Lancement sur {nb_coeurs} cœurs en parallèle...")
-
-    reussis = 0
-
-    with Pool(processes=nb_coeurs) as pool:
-        for i, (succes, resultat) in enumerate(pool.imap_unordered(worker_generer_reel, taches)):
-            if succes:
-                reussis += 1
-                if status_text:
-                    status_text.text(f"✅ [{reussis}/{n_to_make}] {resultat} généré !")
-            else:
-                if status_text:
-                    status_text.text(f"❌ Erreur variante {i+1} : {resultat}")
-
-            if progress_bar:
-                progress_bar.progress((i + 1) / n_to_make)
-
-            if stop_event and stop_event.is_set():
-                pool.terminate()
-                break
-
-    return reussis
+    clip_base.close()
+    del clip_base
