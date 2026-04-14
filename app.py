@@ -3,31 +3,35 @@ import os
 import time
 import shutil
 import generateur
-import drive_manager
 from utilisateurs import USERS
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="OR-DUSINE AI PRO", page_icon="💎", layout="wide")
 
-# --- DESIGN LUXURY GOLD & DARK ---
+# --- DESIGN LUXURY GOLD & DARK (CSS CUSTOM) ---
 st.markdown("""
 <style>
 .stApp { background-color: #0E1117; color: white; }
 div.stButton > button:first-child {
-    background: linear-gradient(45deg, #FFD700, #B8860B);
-    color: black; border: none; font-weight: bold;
-    border-radius: 8px; transition: 0.3s;
+background: linear-gradient(45deg, #FFD700, #B8860B);
+color: black;
+border: none;
+font-weight: bold;
+border-radius: 8px;
+transition: 0.3s;
 }
-div.stButton > button:first-child:hover { transform: scale(1.02); color: white; }
+div.stButton > button:first-child:hover {
+transform: scale(1.02);
+color: white;
+}
 .stProgress > div > div > div > div { background-color: #FFD700; }
 [data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #FFD700; }
 h1, h2, h3 { color: #FFD700 !important; font-family: 'Arial Rounded MT Bold', sans-serif; }
 </style>
 """, unsafe_allow_html=True)
 
-
 # ==========================================
-# 🏗️ ESPACES PRIVÉS
+# 🏗️ CRÉATEUR D'ESPACES PRIVÉS
 # ==========================================
 
 def init_espace_prive(username):
@@ -38,9 +42,8 @@ def init_espace_prive(username):
     os.makedirs(dossier_modeles, exist_ok=True)
     return dossier_base, dossier_scripts, dossier_modeles
 
-
 # ==========================================
-# 🔐 LOGIN
+# 🔐 SYSTÈME DE LOGIN MULTI-UTILISATEURS
 # ==========================================
 
 if "logged_in" not in st.session_state:
@@ -48,7 +51,9 @@ if "logged_in" not in st.session_state:
     st.session_state["current_user"] = ""
 
 def verifier_identifiants(username, password):
-    return username in USERS and USERS[username] == password
+    if username in USERS and USERS[username] == password:
+        return True
+    return False
 
 if not st.session_state["logged_in"]:
     st.title("🔐 Accès Restreint : OR-DUSINE PRO")
@@ -64,148 +69,65 @@ if not st.session_state["logged_in"]:
             st.session_state["current_user"] = user_input
             st.rerun()
         else:
-            st.error("❌ Identifiant ou mot de passe incorrect.")
+            st.error("❌ Identifiant ou mot de passe incorrect. Accès refusé.")
     st.stop()
 
+# --- INITIALISATION DES VARIABLES DE L'ESPACE PRIVÉ ---
 ws_base, ws_scripts, ws_modeles = init_espace_prive(st.session_state['current_user'])
-username = st.session_state['current_user']
-
 
 # ==========================================
-# 🌍 SIDEBAR + NAVIGATION
+# 🌍 NAVIGATION
 # ==========================================
 
 with st.sidebar:
     st.title("💎 OR-DUSINE PRO")
     st.markdown("---")
-    menu = st.radio("MENU NAVIGATION", [
-        "🚀 CENTRE DE PRODUCTION",
-        "✍️ ÉDITEUR CAPTIONS",
-        "📂 GESTION DES MODÈLES"
-    ])
-    st.markdown("---")
-
-    # --- BLOC GOOGLE DRIVE ---
-    st.subheader("☁️ Google Drive")
-    drive_service = drive_manager.get_drive_service(username)
-
-    if drive_service:
-        st.success("✅ Google Drive connecté !")
-        if st.button("🔌 Déconnecter Drive", use_container_width=True):
-            drive_manager.disconnect_drive(username)
-            st.rerun()
-    else:
-        st.warning("❌ Drive non connecté")
-
-        # Étape 1 : Générer le lien
-        if st.button("🔗 Connecter mon Google Drive", use_container_width=True):
-            st.session_state["show_drive_auth"] = True
-
-        if st.session_state.get("show_drive_auth"):
-            auth_url = drive_manager.get_auth_url()
-            st.markdown(f"**1.** [👉 Clique ici pour autoriser]({auth_url})")
-            st.markdown("**2.** Google va afficher un **code** — copie-le")
-            st.markdown("**3.** Colle-le ici :")
-
-            code_input = st.text_input("📋 Code Google :", placeholder="Colle le code ici...")
-
-            if st.button("✅ Valider le code", use_container_width=True):
-                if code_input:
-                    succes = drive_manager.save_token_from_code(username, code_input)
-                    if succes:
-                        st.success("✅ Drive connecté !")
-                        st.session_state["show_drive_auth"] = False
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("❌ Code invalide. Réessaie !")
-                else:
-                    st.warning("Colle d'abord le code !")
-
+    menu = st.radio("MENU NAVIGATION", ["🚀 CENTRE DE PRODUCTION", "✍️ ÉDITEUR CAPTIONS", "📂 GESTION DES MODÈLES"])
     st.markdown("---")
     st.info("Statut Serveur : ✅ Opérationnel")
-    st.success(f"Connecté : {username}")
+    st.success(f"Connecté : {st.session_state['current_user']}")
     if st.button("🚪 Déconnexion"):
         st.session_state["logged_in"] = False
         st.rerun()
-
 
 # ==========================================
 # ONGLET 1 : CENTRE DE PRODUCTION
 # ==========================================
 
 if menu == "🚀 CENTRE DE PRODUCTION":
-    st.header(f"🚀 Production Privée ({username})")
+    st.header(f"🚀 Production Privée ({st.session_state['current_user']})")
 
     col1, col2 = st.columns(2)
     with col1:
-        video_files = st.file_uploader(
-            "🎥 Glisse tes vidéos ici",
-            type=["mp4", "mov"],
-            accept_multiple_files=True
-        )
+        video_files = st.file_uploader("🎥 Glisse tes vidéos ici (Tu peux en mettre plusieurs !)", type=["mp4", "mov"], accept_multiple_files=True)
     with col2:
         scripts = [f for f in os.listdir(ws_scripts) if f.endswith(".txt")]
         if scripts:
             script_choisi = st.selectbox("📄 Choisir un Script", scripts)
         else:
-            st.warning("Aucun script. Va dans 'ÉDITEUR CAPTIONS' pour en créer un !")
+            st.warning("Aucun script trouvé. Va dans l'onglet 'ÉDITEUR CAPTIONS' pour en créer un !")
             script_choisi = None
 
     st.markdown("---")
     col3, col4 = st.columns(2)
     with col3:
-        nb_reels = st.number_input("Quantité de variantes", min_value=1, max_value=50, value=5)
+        nb_reels = st.number_input("Quantité de variantes à générer", min_value=1, max_value=50, value=5)
     with col4:
-        nom_modele = st.text_input("Nom du Modèle", "Nouveau_Modele")
-
-    # --- OPTIONS GOOGLE DRIVE ---
-    drive_service = drive_manager.get_drive_service(username)
-    upload_drive = False
-    dossier_drive_choisi_id = None
-    dossier_drive_choisi_nom = None
-
-    if drive_service:
-        st.markdown("---")
-        st.subheader("☁️ Options Google Drive")
-        upload_drive = st.toggle("📤 Envoyer sur Google Drive après génération", value=True)
-
-        if upload_drive:
-            col_drive1, col_drive2 = st.columns(2)
-            with col_drive1:
-                dossiers = drive_manager.lister_dossiers_drive(drive_service)
-                options_dossiers = {"📁 Racine de mon Drive": None}
-                for d in dossiers:
-                    options_dossiers[f"📂 {d['name']}"] = d['id']
-                dossier_selectionne = st.selectbox("Dossier de destination :", list(options_dossiers.keys()))
-                dossier_drive_choisi_id = options_dossiers[dossier_selectionne]
-                dossier_drive_choisi_nom = dossier_selectionne
-            with col_drive2:
-                nouveau_dossier_nom = st.text_input("Ou créer un nouveau dossier :", placeholder="Nom du dossier")
-                if st.button("➕ Créer", use_container_width=True):
-                    if nouveau_dossier_nom:
-                        new_id = drive_manager.creer_dossier_drive(drive_service, nouveau_dossier_nom, dossier_drive_choisi_id)
-                        if new_id:
-                            st.success(f"✅ Dossier '{nouveau_dossier_nom}' créé !")
-                            time.sleep(1)
-                            st.rerun()
-    else:
-        st.info("💡 Connecte ton Google Drive dans la sidebar pour l'upload automatique !")
-
-    st.markdown("---")
+        nom_modele = st.text_input("Nom du Modèle (ex: Chloe_OF, Emma_Tiktok...)", "Nouveau_Modele")
 
     if st.button("⚡ LANCER LA MACHINE", use_container_width=True):
-        if video_files and script_choisi:
+        if video_files:
             progress_bar = st.progress(0)
-            status = st.empty()
             st.info(f"🚀 Production lancée pour {len(video_files)} vidéos...")
 
             dossier_sortie_modele = os.path.join(ws_modeles, nom_modele)
             os.makedirs(dossier_sortie_modele, exist_ok=True)
+
             chemin_script_complet = os.path.join(ws_scripts, script_choisi)
 
             for i, video_file in enumerate(video_files):
-                status.text(f"⚙️ Traitement vidéo {i+1}/{len(video_files)}...")
+                st.write(f"⚙️ Traitement de la vidéo {i+1}...")
+
                 temp_video_path = f"temp_video_{i}.mp4"
                 with open(temp_video_path, "wb") as f:
                     f.write(video_file.read())
@@ -216,7 +138,7 @@ if menu == "🚀 CENTRE DE PRODUCTION":
                     dossier_sortie=dossier_sortie_modele,
                     n_to_make=nb_reels,
                     modele_nom=f"{nom_modele}_{i+1}",
-                    status_text=status
+                    status_text=st.empty()
                 )
 
                 if os.path.exists(temp_video_path):
@@ -224,66 +146,47 @@ if menu == "🚀 CENTRE DE PRODUCTION":
 
                 progress_bar.progress((i + 1) / len(video_files))
 
-            st.success("✅ Toutes les vidéos ont été générées !")
-
-            # --- UPLOAD GOOGLE DRIVE ---
-            if upload_drive and drive_service:
-                st.info("☁️ Upload vers Google Drive en cours...")
-                status_drive = st.empty()
-                dossier_modele_drive_id = drive_manager.creer_dossier_drive(
-                    drive_service, nom_modele, dossier_drive_choisi_id
-                )
-                nb_uploaded = drive_manager.uploader_videos_vers_drive(
-                    service=drive_service,
-                    dossier_local=dossier_sortie_modele,
-                    dossier_drive_id=dossier_modele_drive_id,
-                    status_text=status_drive
-                )
-                status_drive.empty()
-                st.success(f"✅ {nb_uploaded} vidéos uploadées sur Google Drive !")
-
+            st.success("✅ Toutes les vidéos ont été générées et sont dans ton Drive !")
             st.balloons()
         else:
-            st.error("⚠️ Ajoute au moins une vidéo et sélectionne un script !")
-
+            st.error("⚠️ N'oublie pas de glisser au moins une vidéo !")
 
 # ==========================================
 # ONGLET 2 : ÉDITEUR DE CAPTIONS
 # ==========================================
 
 elif menu == "✍️ ÉDITEUR CAPTIONS":
-    st.header(f"✍️ Gestion de tes Scripts ({username})")
-    st.write("Règle : 1 Entrée = Ligne | 2 Entrées = Espace | 3 Entrées = Nouvelle Vidéo")
+    st.header(f"✍️ Gestion de tes Scripts ({st.session_state['current_user']})")
+    st.write("Règle : 1 Entrée = Ligne suivante | 2 Entrées = Espace | 3 Entrées = Nouvelle Vidéo")
     st.markdown("---")
 
-    choix_action = st.radio("Que souhaites-tu faire ?", [
-        "📝 Créer un nouveau script",
-        "✏️ Modifier / Supprimer un script existant"
-    ])
+    choix_action = st.radio("Que souhaites-tu faire ?", ["📝 Créer un nouveau script", "✏️ Modifier / Supprimer un script existant"])
     scripts_existants = [f for f in os.listdir(ws_scripts) if f.endswith(".txt")]
 
     if choix_action == "📝 Créer un nouveau script":
-        nom_script = st.text_input("Nom du script (sans .txt)", "nouveau_script")
+        nom_script = st.text_input("Nom du script (sans le .txt)", "nouveau_script")
         contenu_script = st.text_area("Colle ou tape ton texte ici...", height=300)
-        if st.button("💾 SAUVEGARDER", use_container_width=True):
+        if st.button("💾 SAUVEGARDER LE NOUVEAU SCRIPT", use_container_width=True):
             if nom_script and contenu_script:
                 chemin_sauvegarde = os.path.join(ws_scripts, f"{nom_script}.txt")
                 with open(chemin_sauvegarde, "w", encoding="utf-8") as f:
                     f.write(contenu_script)
-                st.success("Script sauvegardé !")
+                st.success(f"Script sauvegardé dans ton espace privé !")
                 time.sleep(1)
                 st.rerun()
             else:
-                st.warning("Il faut un nom et du texte !")
+                st.warning("Il faut un nom et du texte pour sauvegarder !")
     else:
         if scripts_existants:
             script_a_modifier = st.selectbox("Sélectionne le script :", scripts_existants)
             chemin_script_actuel = os.path.join(ws_scripts, script_a_modifier)
             with open(chemin_script_actuel, "r", encoding="utf-8") as f:
                 contenu_actuel = f.read()
+
             nom_actuel = script_a_modifier.replace(".txt", "")
             nouveau_nom = st.text_input("Nom du script", nom_actuel)
-            nouveau_contenu = st.text_area("Modifie ton texte...", value=contenu_actuel, height=300)
+            nouveau_contenu = st.text_area("Modifie ton texte ici...", value=contenu_actuel, height=300)
+
             colA, colB = st.columns(2)
             with colA:
                 if st.button("💾 METTRE À JOUR", use_container_width=True):
@@ -296,21 +199,20 @@ elif menu == "✍️ ÉDITEUR CAPTIONS":
                     time.sleep(1)
                     st.rerun()
             with colB:
-                if st.button("🗑️ SUPPRIMER", use_container_width=True):
+                if st.button("🗑️ SUPPRIMER CE SCRIPT", use_container_width=True):
                     os.remove(chemin_script_actuel)
-                    st.error("Script supprimé !")
+                    st.error("Script supprimé définitivement !")
                     time.sleep(1)
                     st.rerun()
         else:
-            st.info("Aucun script. Crées-en un nouveau !")
-
+            st.info("Aucun script enregistré. Crées-en un nouveau !")
 
 # ==========================================
 # ONGLET 3 : GESTION DES MODÈLES
 # ==========================================
 
 elif menu == "📂 GESTION DES MODÈLES":
-    st.header(f"📂 Ton Drive Privé ({username})")
+    st.header(f"📂 Ton Drive Privé ({st.session_state['current_user']})")
 
     modeles = [d for d in os.listdir(ws_modeles) if os.path.isdir(os.path.join(ws_modeles, d))]
 
@@ -319,65 +221,51 @@ elif menu == "📂 GESTION DES MODÈLES":
         chemin_modele = os.path.join(ws_modeles, modele_choisi)
         chemin_zip = os.path.join(ws_modeles, f"{modele_choisi}.zip")
 
-        with st.expander("⚙️ Options (ZIP / Renommer / Supprimer / Upload Drive)", expanded=False):
-            col_zip, col_edit1, col_edit2, col_drive = st.columns(4)
+        with st.expander("⚙️ Options du Modèle (Exporter en ZIP / Renommer / Supprimer)", expanded=False):
+            col_zip, col_edit1, col_edit2 = st.columns(3)
 
             with col_zip:
-                st.write("📦 Exporter en ZIP :")
-                if st.button("1. Préparer ZIP", use_container_width=True):
-                    with st.spinner("Compression..."):
+                st.write("📦 Exporter toutes les vidéos :")
+                if st.button("1. Préparer le fichier .ZIP", use_container_width=True):
+                    with st.spinner("Compression en cours..."):
                         shutil.make_archive(chemin_modele, 'zip', chemin_modele)
                     st.success("✅ ZIP prêt !")
                 if os.path.exists(chemin_zip):
                     with open(chemin_zip, "rb") as f:
-                        st.download_button("2. 📥 Télécharger", f, file_name=f"{modele_choisi}.zip",
-                                           mime="application/zip", use_container_width=True)
+                        st.download_button(
+                            label="2. 📥 TÉLÉCHARGER LE ZIP",
+                            data=f,
+                            file_name=f"{modele_choisi}.zip",
+                            mime="application/zip",
+                            use_container_width=True
+                        )
 
             with col_edit1:
-                st.write("✏️ Renommer :")
+                st.write("✏️ Changer le nom :")
                 nouveau_nom_modele = st.text_input("", value=modele_choisi, label_visibility="collapsed")
-                if st.button("Renommer", use_container_width=True):
+                if st.button("Renommer le Modèle", use_container_width=True):
                     if nouveau_nom_modele != modele_choisi:
                         nouveau_chemin = os.path.join(ws_modeles, nouveau_nom_modele)
                         os.rename(chemin_modele, nouveau_chemin)
                         if os.path.exists(chemin_zip): os.remove(chemin_zip)
-                        st.success("Renommé !")
+                        st.success("Nom mis à jour !")
                         time.sleep(1)
                         st.rerun()
 
             with col_edit2:
-                st.write("🗑️ Supprimer :")
+                st.write("🗑️ Nettoyage complet :")
                 st.write("")
-                if st.button("Supprimer TOUT", use_container_width=True):
+                if st.button("Supprimer TOUT le Modèle", use_container_width=True):
                     shutil.rmtree(chemin_modele)
                     if os.path.exists(chemin_zip): os.remove(chemin_zip)
-                    st.error(f"{modele_choisi} supprimé !")
+                    st.error(f"Le modèle {modele_choisi} a été supprimé !")
                     time.sleep(1)
                     st.rerun()
 
-            with col_drive:
-                st.write("☁️ Upload Drive :")
-                drive_service = drive_manager.get_drive_service(username)
-                if drive_service:
-                    dossiers = drive_manager.lister_dossiers_drive(drive_service)
-                    options = {"📁 Racine": None}
-                    for d in dossiers:
-                        options[f"📂 {d['name']}"] = d['id']
-                    dest = st.selectbox("Destination :", list(options.keys()), key="dest_modele")
-                    dest_id = options[dest]
-                    if st.button("📤 Envoyer sur Drive", use_container_width=True):
-                        with st.spinner("Upload en cours..."):
-                            status_up = st.empty()
-                            folder_id = drive_manager.creer_dossier_drive(drive_service, modele_choisi, dest_id)
-                            nb = drive_manager.uploader_videos_vers_drive(drive_service, chemin_modele, folder_id, status_up)
-                            status_up.empty()
-                        st.success(f"✅ {nb} vidéos envoyées sur Drive !")
-                else:
-                    st.warning("Connecte ton Drive dans la sidebar !")
-
         st.markdown("---")
-        st.subheader(f"🎞️ Vidéos de {modele_choisi}")
-        videos = [f for f in os.listdir(chemin_modele) if f.endswith(".mp4")]
+        st.subheader(f"🎞️ Vidéos individuelles de {modele_choisi}")
+        fichiers = os.listdir(chemin_modele)
+        videos = [f for f in fichiers if f.endswith(".mp4")]
 
         if videos:
             for f in videos:
@@ -387,13 +275,12 @@ elif menu == "📂 GESTION DES MODÈLES":
                     st.write(f"▶️ {f}")
                 with col_down:
                     with open(chemin_video_seule, "rb") as file:
-                        st.download_button("📥 Télécharger", file, file_name=f,
-                                           key=f"dl_{f}", use_container_width=True)
+                        st.download_button("📥 Télécharger", file, file_name=f, key=f"dl_{f}", use_container_width=True)
                 with col_del:
                     if st.button("🗑️ Effacer", key=f"del_{f}", use_container_width=True):
                         os.remove(chemin_video_seule)
                         st.rerun()
         else:
-            st.info("Aucune vidéo générée pour ce modèle.")
+            st.info("Ce modèle n'a aucune vidéo générée pour le moment.")
     else:
-        st.write("Aucun modèle dans ton Drive privé.")
+        st.write("Aucun modèle enregistré dans ton Drive privé.")
