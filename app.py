@@ -22,8 +22,6 @@ div.stButton > button:first-child:hover { transform: scale(1.02); color: white; 
 .stProgress > div > div > div > div { background-color: #FFD700; }
 [data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #FFD700; }
 h1, h2, h3 { color: #FFD700 !important; font-family: 'Arial Rounded MT Bold', sans-serif; }
-.drive-connected { background: #1a3a1a; border: 1px solid #00ff00; border-radius: 8px; padding: 10px; margin: 5px 0; }
-.drive-disconnected { background: #3a1a1a; border: 1px solid #ff4444; border-radius: 8px; padding: 10px; margin: 5px 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -69,25 +67,9 @@ if not st.session_state["logged_in"]:
             st.error("❌ Identifiant ou mot de passe incorrect.")
     st.stop()
 
-# --- INIT ESPACE ---
 ws_base, ws_scripts, ws_modeles = init_espace_prive(st.session_state['current_user'])
 username = st.session_state['current_user']
 
-# ==========================================
-# 🔗 GESTION OAUTH GOOGLE (dans l'URL)
-# ==========================================
-
-query_params = st.query_params
-if "code" in query_params:
-    code = query_params["code"]
-    if drive_manager.save_token_from_code(username, code):
-        st.success("✅ Google Drive connecté avec succès !")
-        st.query_params.clear()
-        time.sleep(1)
-        st.rerun()
-    else:
-        st.error("❌ Erreur lors de la connexion Google Drive.")
-        st.query_params.clear()
 
 # ==========================================
 # 🌍 SIDEBAR + NAVIGATION
@@ -108,16 +90,37 @@ with st.sidebar:
     drive_service = drive_manager.get_drive_service(username)
 
     if drive_service:
-        st.markdown('<div class="drive-connected">✅ Drive connecté</div>', unsafe_allow_html=True)
+        st.success("✅ Google Drive connecté !")
         if st.button("🔌 Déconnecter Drive", use_container_width=True):
             drive_manager.disconnect_drive(username)
             st.rerun()
     else:
-        st.markdown('<div class="drive-disconnected">❌ Drive non connecté</div>', unsafe_allow_html=True)
+        st.warning("❌ Drive non connecté")
+
+        # Étape 1 : Générer le lien
         if st.button("🔗 Connecter mon Google Drive", use_container_width=True):
-            auth_url = drive_manager.get_auth_url(username)
-            st.markdown(f"[👉 Clique ici pour autoriser Google Drive]({auth_url})")
-            st.info("Après autorisation, tu seras redirigé automatiquement.")
+            st.session_state["show_drive_auth"] = True
+
+        if st.session_state.get("show_drive_auth"):
+            auth_url = drive_manager.get_auth_url()
+            st.markdown(f"**1.** [👉 Clique ici pour autoriser]({auth_url})")
+            st.markdown("**2.** Google va afficher un **code** — copie-le")
+            st.markdown("**3.** Colle-le ici :")
+
+            code_input = st.text_input("📋 Code Google :", placeholder="Colle le code ici...")
+
+            if st.button("✅ Valider le code", use_container_width=True):
+                if code_input:
+                    succes = drive_manager.save_token_from_code(username, code_input)
+                    if succes:
+                        st.success("✅ Drive connecté !")
+                        st.session_state["show_drive_auth"] = False
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Code invalide. Réessaie !")
+                else:
+                    st.warning("Colle d'abord le code !")
 
     st.markdown("---")
     st.info("Statut Serveur : ✅ Opérationnel")
@@ -165,7 +168,7 @@ if menu == "🚀 CENTRE DE PRODUCTION":
     if drive_service:
         st.markdown("---")
         st.subheader("☁️ Options Google Drive")
-        upload_drive = st.toggle("📤 Envoyer automatiquement sur Google Drive après génération", value=True)
+        upload_drive = st.toggle("📤 Envoyer sur Google Drive après génération", value=True)
 
         if upload_drive:
             col_drive1, col_drive2 = st.columns(2)
@@ -174,28 +177,20 @@ if menu == "🚀 CENTRE DE PRODUCTION":
                 options_dossiers = {"📁 Racine de mon Drive": None}
                 for d in dossiers:
                     options_dossiers[f"📂 {d['name']}"] = d['id']
-
-                dossier_selectionne = st.selectbox(
-                    "Choisir le dossier de destination :",
-                    list(options_dossiers.keys())
-                )
+                dossier_selectionne = st.selectbox("Dossier de destination :", list(options_dossiers.keys()))
                 dossier_drive_choisi_id = options_dossiers[dossier_selectionne]
                 dossier_drive_choisi_nom = dossier_selectionne
-
             with col_drive2:
-                st.write("")
-                st.write("")
-                nouveau_dossier_nom = st.text_input("Ou créer un nouveau dossier :", placeholder="Nom du nouveau dossier")
-                if st.button("➕ Créer ce dossier", use_container_width=True):
+                nouveau_dossier_nom = st.text_input("Ou créer un nouveau dossier :", placeholder="Nom du dossier")
+                if st.button("➕ Créer", use_container_width=True):
                     if nouveau_dossier_nom:
                         new_id = drive_manager.creer_dossier_drive(drive_service, nouveau_dossier_nom, dossier_drive_choisi_id)
                         if new_id:
                             st.success(f"✅ Dossier '{nouveau_dossier_nom}' créé !")
-                            dossier_drive_choisi_id = new_id
                             time.sleep(1)
                             st.rerun()
     else:
-        st.info("💡 Connecte ton Google Drive dans la sidebar pour activer l'upload automatique !")
+        st.info("💡 Connecte ton Google Drive dans la sidebar pour l'upload automatique !")
 
     st.markdown("---")
 
@@ -235,23 +230,17 @@ if menu == "🚀 CENTRE DE PRODUCTION":
             if upload_drive and drive_service:
                 st.info("☁️ Upload vers Google Drive en cours...")
                 status_drive = st.empty()
-
-                # Crée un sous-dossier au nom du modèle sur Drive
                 dossier_modele_drive_id = drive_manager.creer_dossier_drive(
-                    drive_service,
-                    nom_modele,
-                    dossier_drive_choisi_id
+                    drive_service, nom_modele, dossier_drive_choisi_id
                 )
-
                 nb_uploaded = drive_manager.uploader_videos_vers_drive(
                     service=drive_service,
                     dossier_local=dossier_sortie_modele,
                     dossier_drive_id=dossier_modele_drive_id,
                     status_text=status_drive
                 )
-
                 status_drive.empty()
-                st.success(f"✅ {nb_uploaded} vidéos uploadées sur Google Drive dans '{dossier_drive_choisi_nom}/{nom_modele}' !")
+                st.success(f"✅ {nb_uploaded} vidéos uploadées sur Google Drive !")
 
             st.balloons()
         else:
@@ -292,11 +281,9 @@ elif menu == "✍️ ÉDITEUR CAPTIONS":
             chemin_script_actuel = os.path.join(ws_scripts, script_a_modifier)
             with open(chemin_script_actuel, "r", encoding="utf-8") as f:
                 contenu_actuel = f.read()
-
             nom_actuel = script_a_modifier.replace(".txt", "")
             nouveau_nom = st.text_input("Nom du script", nom_actuel)
             nouveau_contenu = st.text_area("Modifie ton texte...", value=contenu_actuel, height=300)
-
             colA, colB = st.columns(2)
             with colA:
                 if st.button("💾 METTRE À JOUR", use_container_width=True):
@@ -378,7 +365,6 @@ elif menu == "📂 GESTION DES MODÈLES":
                         options[f"📂 {d['name']}"] = d['id']
                     dest = st.selectbox("Destination :", list(options.keys()), key="dest_modele")
                     dest_id = options[dest]
-
                     if st.button("📤 Envoyer sur Drive", use_container_width=True):
                         with st.spinner("Upload en cours..."):
                             status_up = st.empty()
