@@ -157,13 +157,13 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         if status_text:
             status_text.text(f"⚡ [{i+1}/{n_to_make}] Production de la variante : {txt[:20]}...")
 
-        # --- PACK ANTI-BAN AMÉLIORÉ ---
+        # --- PACK ANTI-BAN ---
 
-        # 1. Zoom + recadrage aléatoire
-        zoom_factor = random.uniform(1.02, 1.05)
+        # 1. Zoom aléatoire
+        zoom_factor = random.uniform(1.02, 1.04)
         video_reel = clip_base.resized(zoom_factor)
 
-        # 2. Décalage du crop (unique à chaque variante)
+        # 2. Décalage du crop unique
         offset_x = random.randint(-int(clip_base.w * 0.02), int(clip_base.w * 0.02))
         offset_y = random.randint(-int(clip_base.h * 0.02), int(clip_base.h * 0.02))
         video_reel = video_reel.cropped(
@@ -173,12 +173,12 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
             height=clip_base.h
         )
 
-        # 3. Effets visuels variés
+        # 3. Effets visuels
         active_effects = []
         if i % 2 == 0:
             active_effects.append(vfx.MirrorX())
         try:
-            active_effects.append(vfx.Colorx(random.uniform(0.97, 1.03)))
+            active_effects.append(vfx.Colorx(random.uniform(0.99, 1.01)))
         except:
             pass
         try:
@@ -188,19 +188,11 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         if active_effects:
             video_reel = video_reel.with_effects(active_effects)
 
-        # 4. Variation de vitesse légère
-        try:
-            video_reel = video_reel.with_speed_scaled(random.uniform(0.98, 1.02))
-        except:
-            pass
+        # 4. Coupure FIN uniquement (comme l'original)
+        cut_time = random.uniform(0.05, 0.25)
+        video_reel = video_reel.subclipped(0, video_reel.duration - cut_time)
 
-        # 5. Coupure début ET fin aléatoire
-        cut_start = random.uniform(0.0, 0.15)
-        cut_end = random.uniform(0.05, 0.25)
-        if video_reel.duration > (cut_start + cut_end + 0.5):
-            video_reel = video_reel.subclipped(cut_start, video_reel.duration - cut_end)
-
-        # 6. Texte avec style varié
+        # 5. Texte avec style varié
         couleur, stroke, y_offset = varier_style_texte()
         txt_img = create_unique_text_sticker(
             txt,
@@ -211,13 +203,13 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         )
         txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
 
-        # 7. Encodage varié
-        bitrate = random.choice(["3800k", "4000k", "4200k", "4500k", "4700k"])
-        fps = random.choice([23.976, 24, 25, 29.97])
+        # 6. Encodage varié
+        bitrate = random.choice(["3800k", "4000k", "4200k", "4500k"])
+        fps = random.choice([23.976, 24, 25])
 
         final = CompositeVideoClip([video_reel, txt_clip])
 
-        # 8. Nom de fichier unique
+        # 7. Nom de fichier unique
         output_name = f"{modele_nom}_Reel_{i+1}_v{uuid.uuid4().hex[:6]}.mp4"
 
         final.write_videofile(
