@@ -1,4 +1,5 @@
 import os
+import gc
 import random
 import uuid
 import numpy as np
@@ -73,7 +74,11 @@ def create_unique_text_sticker(text, reel_size, base_y, couleur=(255, 255, 255),
     length = len(text.replace('\n', ' '))
     base_font_scale = canvas_w / 1080.0
 
-    font_size = int(80 * base_font_scale) if length < 15 else (int(60 * base_font_scale) if length < 50 else int(45 * base_font_scale))
+    font_size = (
+        int(80 * base_font_scale) if length < 15
+        else int(60 * base_font_scale) if length < 50
+        else int(45 * base_font_scale)
+    )
     font_size += random.randint(-3, 3)
 
     try:
@@ -119,13 +124,12 @@ def get_clean_ffmpeg_params():
     )
     fake_date_str = fake_date.strftime("%Y-%m-%dT%H:%M:%S")
     unique_id = uuid.uuid4().hex[:12]
-    encoder_version = f"{random.randint(1,9)}.{random.randint(0,9)}.{random.randint(0,99)}"
     return [
         "-map_metadata", "-1",
         "-metadata", f"comment=EditID_{unique_id}",
         "-metadata", f"creation_time={fake_date_str}",
-        "-metadata", f"encoder=MediaEncoder_{encoder_version}",
-        "-metadata", f"handler_name=VideoHandler_{random.randint(100,999)}",
+        "-preset", "ultrafast",
+        "-tune", "fastdecode",
     ]
 
 
@@ -133,7 +137,9 @@ def get_clean_ffmpeg_params():
 # 🏭 MOTEUR PRINCIPAL
 # ============================================================
 
-def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_make, modele_nom, progress_bar=None, status_text=None, stop_event=None):
+def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie,
+                             n_to_make, modele_nom,
+                             progress_bar=None, status_text=None, stop_event=None):
 
     with open(chemin_captions, "r", encoding="utf-8") as f:
         contenu = f.read()
@@ -142,6 +148,7 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
     if not all_captions:
         all_captions = ["Texte par défaut"]
 
+    # Pré-chargement UNE SEULE FOIS
     clip_base = VideoFileClip(chemin_video)
     base_y = get_base_y_placement(chemin_video, clip_base.h)
 
@@ -149,89 +156,84 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
 
     for i in range(n_to_make):
         if stop_event and stop_event.is_set():
-            print("Arrêt de la production demandé.")
             break
 
         txt = all_captions[i % len(all_captions)]
 
         if status_text:
-            status_text.text(f"⚡ [{i+1}/{n_to_make}] Production de la variante : {txt[:20]}...")
+            status_text.text(f"⚡ [{i+1}/{n_to_make}] Production : {txt[:20]}...")
 
-        # --- PACK ANTI-BAN ---
+        video_reel = None
+        txt_clip = None
+        final = None
 
-        # 1. Zoom aléatoire
-        zoom_factor = random.uniform(1.02, 1.04)
-        video_reel = clip_base.resized(zoom_factor)
-
-        # 2. Décalage du crop unique
-        offset_x = random.randint(-int(clip_base.w * 0.02), int(clip_base.w * 0.02))
-        offset_y = random.randint(-int(clip_base.h * 0.02), int(clip_base.h * 0.02))
-        video_reel = video_reel.cropped(
-            x_center=(video_reel.w / 2) + offset_x,
-            y_center=(video_reel.h / 2) + offset_y,
-            width=clip_base.w,
-            height=clip_base.h
-        )
-
-        # 3. Effets visuels
-        active_effects = []
-        if i % 2 == 0:
-            active_effects.append(vfx.MirrorX())
         try:
-            active_effects.append(vfx.Colorx(random.uniform(0.99, 1.01)))
-        except:
-            pass
-        try:
-            active_effects.append(vfx.Rotate(random.uniform(-0.6, 0.6)))
-        except:
-            pass
-        if active_effects:
-            video_reel = video_reel.with_effects(active_effects)
+            # 1. Zoom léger
+            zoom_factor = random.uniform(1.02, 1.04)
+            video_reel = clip_base.resized(zoom_factor)
 
-        # 4. Coupure FIN uniquement (comme l'original)
-        cut_time = random.uniform(0.05, 0.25)
-        video_reel = video_reel.subclipped(0, video_reel.duration - cut_time)
+            # 2. Crop centré (sans décalage pour éviter les bords noirs)
+            video_reel = video_reel.cropped(
+                x_center=video_reel.w / 2,
+                y_center=video_reel.h / 2,
+                width=clip_base.w,
+                height=clip_base.h
+            )
 
-        # 5. Texte avec style varié
-        couleur, stroke, y_offset = varier_style_texte()
-        txt_img = create_unique_text_sticker(
-            txt,
-            (clip_base.w, clip_base.h),
-            base_y + y_offset,
-            couleur=couleur,
-            stroke_w=stroke
-        )
-        txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
+            # 3. Miroir 1 sur 2 (rapide, pas de bords noirs)
+            if i % 2 == 0:
+                video_reel = video_reel.with_effects([vfx.MirrorX()])
 
-        # 6. Encodage varié
-        bitrate = random.choice(["3800k", "4000k", "4200k", "4500k"])
-        fps = random.choice([23.976, 24, 25])
+            # 4. Coupure fin uniquement
+            cut_time = random.uniform(0.05, 0.15)
+            if video_reel.duration > cut_time + 0.5:
+                video_reel = video_reel.subclipped(0, video_reel.duration - cut_time)
 
-        final = CompositeVideoClip([video_reel, txt_clip])
+            # 5. Texte varié
+            couleur, stroke, y_offset = varier_style_texte()
+            txt_img = create_unique_text_sticker(
+                txt, (clip_base.w, clip_base.h),
+                base_y + y_offset, couleur=couleur, stroke_w=stroke
+            )
+            txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
 
-        # 7. Nom de fichier unique
-        output_name = f"{modele_nom}_Reel_{i+1}_v{uuid.uuid4().hex[:6]}.mp4"
+            # 6. Composition finale
+            final = CompositeVideoClip([video_reel, txt_clip])
+            output_name = f"{modele_nom}_Reel_{i+1}_v{uuid.uuid4().hex[:6]}.mp4"
 
-        final.write_videofile(
-            os.path.join(dossier_sortie, output_name),
-            codec="libx264",
-            audio_codec="aac",
-            fps=fps,
-            bitrate=bitrate,
-            logger=None,
-            ffmpeg_params=get_clean_ffmpeg_params()
-        )
+            # 7. Encodage ultra rapide
+            final.write_videofile(
+                os.path.join(dossier_sortie, output_name),
+                codec="libx264",
+                audio_codec="aac",
+                fps=24,
+                logger=None,
+                ffmpeg_params=get_clean_ffmpeg_params()
+            )
 
-        # Nettoyage mémoire
-        final.close()
-        video_reel.close()
-        txt_clip.close()
-        del final, video_reel, txt_clip
+            reels_reussis += 1
 
-        reels_reussis += 1
+        except Exception as e:
+            print(f"Erreur variante {i+1} : {e}")
+
+        finally:
+            # Nettoyage mémoire forcé après chaque vidéo
+            if final:
+                try: final.close()
+                except: pass
+            if video_reel:
+                try: video_reel.close()
+                except: pass
+            if txt_clip:
+                try: txt_clip.close()
+                except: pass
+            try: del final, video_reel, txt_clip
+            except: pass
+            gc.collect()
 
         if progress_bar:
             progress_bar.progress(reels_reussis / n_to_make)
 
     clip_base.close()
     del clip_base
+    gc.collect()
