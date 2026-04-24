@@ -1,13 +1,11 @@
 import os
-import gc
 import random
-import uuid
 import numpy as np
 import warnings
 import cv2
 import re
 import textwrap
-from datetime import datetime, timedelta
+from datetime import datetime
 from PIL import Image, ImageFont
 from pilmoji import Pilmoji
 from pilmoji.source import AppleEmojiSource
@@ -17,11 +15,6 @@ warnings.filterwarnings("ignore")
 from moviepy import VideoFileClip, ImageClip, CompositeVideoClip, vfx
 
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-
-
-# ============================================================
-# 🎯 DÉTECTION DE VISAGE
-# ============================================================
 
 def get_base_y_placement(video_path, canvas_h):
     safe_top = int(canvas_h * 0.22)
@@ -43,30 +36,7 @@ def get_base_y_placement(video_path, canvas_h):
     except: pass
     return fallback_y
 
-
-# ============================================================
-# 🎨 VARIATION STYLE TEXTE
-# ============================================================
-
-def varier_style_texte():
-    couleurs = [
-        (255, 255, 255),
-        (255, 252, 245),
-        (240, 240, 255),
-        (255, 255, 230),
-        (250, 248, 255),
-    ]
-    couleur = random.choice(couleurs)
-    stroke = random.randint(3, 6)
-    y_offset = random.randint(-25, 25)
-    return couleur, stroke, y_offset
-
-
-# ============================================================
-# 🖼️ CRÉATION DU STICKER TEXTE
-# ============================================================
-
-def create_unique_text_sticker(text, reel_size, base_y, couleur=(255, 255, 255), stroke_w=5):
+def create_unique_text_sticker(text, reel_size, base_y):
     canvas_w, canvas_h = reel_size
     img = Image.new('RGBA', reel_size, (0, 0, 0, 0))
 
@@ -74,11 +44,7 @@ def create_unique_text_sticker(text, reel_size, base_y, couleur=(255, 255, 255),
     length = len(text.replace('\n', ' '))
     base_font_scale = canvas_w / 1080.0
 
-    font_size = (
-        int(80 * base_font_scale) if length < 15
-        else int(60 * base_font_scale) if length < 50
-        else int(45 * base_font_scale)
-    )
+    font_size = int(80 * base_font_scale) if length < 15 else (int(60 * base_font_scale) if length < 50 else int(45 * base_font_scale))
     font_size += random.randint(-3, 3)
 
     try:
@@ -97,6 +63,7 @@ def create_unique_text_sticker(text, reel_size, base_y, couleur=(255, 255, 255),
             lignes_coupees = textwrap.wrap(para, width=22)
             lines.extend(lignes_coupees)
 
+        stroke_w = max(3, int(5 * base_font_scale))
         espacement = int(10 * base_font_scale)
         total_h = len(lines) * (font_size + espacement)
         start_y = final_y - (total_h // 2)
@@ -106,40 +73,18 @@ def create_unique_text_sticker(text, reel_size, base_y, couleur=(255, 255, 255),
                 w_t = pilmoji.getsize(l, font=font)[0]
                 x = (canvas_w - w_t) // 2
                 pilmoji.text((x, start_y), l, font=font,
-                    fill=couleur, stroke_width=stroke_w, stroke_fill="black")
+                             fill="white", stroke_width=stroke_w, stroke_fill="black")
             start_y += font_size + espacement
 
     return np.array(img)
 
+def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_make, modele_nom, progress_bar=None, status_text=None, stop_event=None):
 
-# ============================================================
-# 🧹 MÉTADONNÉES FALSIFIÉES
-# ============================================================
-
-def get_clean_ffmpeg_params():
-    fake_date = datetime.now() - timedelta(
-        days=random.randint(0, 30),
-        hours=random.randint(0, 23),
-        minutes=random.randint(0, 59)
-    )
-    fake_date_str = fake_date.strftime("%Y-%m-%dT%H:%M:%S")
-    unique_id = uuid.uuid4().hex[:12]
-    return [
-        "-map_metadata", "-1",
-        "-metadata", f"comment=EditID_{unique_id}",
-        "-metadata", f"creation_time={fake_date_str}",
-        "-preset", "ultrafast",
-        "-tune", "fastdecode",
-    ]
-
-
-# ============================================================
-# 🏭 MOTEUR PRINCIPAL
-# ============================================================
-
-def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie,
-                             n_to_make, modele_nom,
-                             progress_bar=None, status_text=None, stop_event=None):
+    # =============================================
+    # DURÉE CIBLE : entre 6.0 et 8.0 secondes
+    DUREE_MIN = 6.0
+    DUREE_MAX = 8.0
+    # =============================================
 
     with open(chemin_captions, "r", encoding="utf-8") as f:
         contenu = f.read()
@@ -148,92 +93,101 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie,
     if not all_captions:
         all_captions = ["Texte par défaut"]
 
-    # Pré-chargement UNE SEULE FOIS
     clip_base = VideoFileClip(chemin_video)
+    duree_source = clip_base.duration
     base_y = get_base_y_placement(chemin_video, clip_base.h)
 
     reels_reussis = 0
 
     for i in range(n_to_make):
         if stop_event and stop_event.is_set():
+            print("Arrêt de la production demandé.")
             break
 
         txt = all_captions[i % len(all_captions)]
 
         if status_text:
-            status_text.text(f"⚡ [{i+1}/{n_to_make}] Production : {txt[:20]}...")
+            status_text.text(f"⚡ [{i+1}/{n_to_make}] Production de la variante : {txt[:20]}...")
 
-        video_reel = None
-        txt_clip = None
-        final = None
+        # --- DURÉE ALÉATOIRE ENTRE 6 ET 8 SECONDES ---
+        duree_cible = round(random.uniform(DUREE_MIN, DUREE_MAX), 2)
 
+        # Si la vidéo source est plus courte que 6s, on garde sa durée complète
+        if duree_source <= DUREE_MIN:
+            duree_finale = duree_source - 0.05
+        else:
+            # On choisit un point de départ aléatoire pour varier le clip
+            max_start = duree_source - duree_cible
+            if max_start > 0:
+                start_time = round(random.uniform(0, max_start), 2)
+            else:
+                start_time = 0
+                duree_cible = duree_source - 0.05
+            duree_finale = duree_cible
+
+        end_time = start_time + duree_finale
+
+        # --- PACK ANTI-BAN ---
+        zoom_factor = random.uniform(1.02, 1.04)
+        video_reel = clip_base.resized(zoom_factor)
+
+        active_effects = []
+        if i % 2 == 0:
+            active_effects.append(vfx.MirrorX())
         try:
-            # 1. Zoom léger
-            zoom_factor = random.uniform(1.02, 1.04)
-            video_reel = clip_base.resized(zoom_factor)
+            active_effects.append(vfx.Colorx(random.uniform(0.99, 1.01)))
+        except:
+            pass
 
-            # 2. Crop centré (sans décalage pour éviter les bords noirs)
-            video_reel = video_reel.cropped(
-                x_center=video_reel.w / 2,
-                y_center=video_reel.h / 2,
-                width=clip_base.w,
-                height=clip_base.h
-            )
+        if active_effects:
+            video_reel = video_reel.with_effects(active_effects)
 
-            # 3. Miroir 1 sur 2 (rapide, pas de bords noirs)
-            if i % 2 == 0:
-                video_reel = video_reel.with_effects([vfx.MirrorX()])
+        video_reel = video_reel.cropped(
+            x_center=video_reel.w / 2,
+            y_center=video_reel.h / 2,
+            width=clip_base.w,
+            height=clip_base.h
+        )
 
-            # 4. Coupure fin uniquement
-            cut_time = random.uniform(0.05, 0.15)
-            if video_reel.duration > cut_time + 0.5:
-                video_reel = video_reel.subclipped(0, video_reel.duration - cut_time)
+        # Découpe entre start_time et end_time → durée entre 6 et 8 secondes
+        video_reel = video_reel.subclipped(start_time, end_time)
 
-            # 5. Texte varié
-            couleur, stroke, y_offset = varier_style_texte()
-            txt_img = create_unique_text_sticker(
-                txt, (clip_base.w, clip_base.h),
-                base_y + y_offset, couleur=couleur, stroke_w=stroke
-            )
-            txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
+        txt_img = create_unique_text_sticker(txt, (clip_base.w, clip_base.h), base_y)
+        txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
 
-            # 6. Composition finale
-            final = CompositeVideoClip([video_reel, txt_clip])
-            output_name = f"{modele_nom}_Reel_{i+1}_v{uuid.uuid4().hex[:6]}.mp4"
+        final = CompositeVideoClip([video_reel, txt_clip])
 
-            # 7. Encodage ultra rapide
-            final.write_videofile(
-                os.path.join(dossier_sortie, output_name),
-                codec="libx264",
-                audio_codec="aac",
-                fps=24,
-                logger=None,
-                ffmpeg_params=get_clean_ffmpeg_params()
-            )
+        output_name = f"{modele_nom}_Reel_{i+1}_variant.mp4"
 
-            reels_reussis += 1
+        # Métadonnées 100% uniques : timestamp + ID aléatoire + durée différente = fingerprint unique
+        gen_id = random.randint(100000, 999999)
+        timestamp_unique = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        clean_params = [
+            "-map_metadata", "-1",
+            "-metadata", f"comment=Gen_{gen_id}_{timestamp_unique}",
+            "-metadata", f"title=Reel_{i+1}_{random.randint(1000,9999)}",
+            "-metadata", f"creation_time={datetime.utcnow().isoformat()}",
+        ]
 
-        except Exception as e:
-            print(f"Erreur variante {i+1} : {e}")
+        final.write_videofile(
+            os.path.join(dossier_sortie, output_name),
+            codec="libx264",
+            audio_codec="aac",
+            fps=24,
+            logger=None,
+            ffmpeg_params=clean_params
+        )
 
-        finally:
-            # Nettoyage mémoire forcé après chaque vidéo
-            if final:
-                try: final.close()
-                except: pass
-            if video_reel:
-                try: video_reel.close()
-                except: pass
-            if txt_clip:
-                try: txt_clip.close()
-                except: pass
-            try: del final, video_reel, txt_clip
-            except: pass
-            gc.collect()
+        # Nettoyage mémoire
+        final.close()
+        video_reel.close()
+        txt_clip.close()
+        del final, video_reel, txt_clip
+
+        reels_reussis += 1
 
         if progress_bar:
             progress_bar.progress(reels_reussis / n_to_make)
 
     clip_base.close()
     del clip_base
-    gc.collect()
