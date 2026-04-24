@@ -93,9 +93,15 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
     if not all_captions:
         all_captions = ["Texte par défaut"]
 
-    clip_base = VideoFileClip(chemin_video)
-    duree_source = clip_base.duration
-    base_y = get_base_y_placement(chemin_video, clip_base.h)
+    # On lit juste la durée et les dimensions de la vidéo source
+    clip_info = VideoFileClip(chemin_video)
+    duree_source = clip_info.duration
+    canvas_w = clip_info.w
+    canvas_h = clip_info.h
+    clip_info.close()
+    del clip_info
+
+    base_y = get_base_y_placement(chemin_video, canvas_h)
 
     reels_reussis = 0
 
@@ -112,24 +118,26 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         # --- DURÉE ALÉATOIRE ENTRE 6 ET 8 SECONDES ---
         duree_cible = round(random.uniform(DUREE_MIN, DUREE_MAX), 2)
 
-        # Si la vidéo source est plus courte que 6s, on garde sa durée complète
         if duree_source <= DUREE_MIN:
-            duree_finale = duree_source - 0.05
+            start_time = 0
+            end_time = duree_source - 0.05
         else:
-            # On choisit un point de départ aléatoire pour varier le clip
             max_start = duree_source - duree_cible
             if max_start > 0:
                 start_time = round(random.uniform(0, max_start), 2)
             else:
                 start_time = 0
                 duree_cible = duree_source - 0.05
-            duree_finale = duree_cible
+            end_time = start_time + duree_cible
 
-        end_time = start_time + duree_finale
+        # --- ON RECHARGE LA VIDÉO PROPREMENT À CHAQUE VARIANTE ---
+        # Couper D'ABORD pour éviter la désynchronisation audio
+        clip_base = VideoFileClip(chemin_video)
+        video_reel = clip_base.subclipped(start_time, end_time)
 
-        # --- PACK ANTI-BAN ---
+        # Ensuite on applique les effets visuels
         zoom_factor = random.uniform(1.02, 1.04)
-        video_reel = clip_base.resized(zoom_factor)
+        video_reel = video_reel.resized(zoom_factor)
 
         active_effects = []
         if i % 2 == 0:
@@ -145,21 +153,18 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
         video_reel = video_reel.cropped(
             x_center=video_reel.w / 2,
             y_center=video_reel.h / 2,
-            width=clip_base.w,
-            height=clip_base.h
+            width=canvas_w,
+            height=canvas_h
         )
 
-        # Découpe entre start_time et end_time → durée entre 6 et 8 secondes
-        video_reel = video_reel.subclipped(start_time, end_time)
-
-        txt_img = create_unique_text_sticker(txt, (clip_base.w, clip_base.h), base_y)
+        txt_img = create_unique_text_sticker(txt, (canvas_w, canvas_h), base_y)
         txt_clip = ImageClip(txt_img).with_duration(video_reel.duration)
 
         final = CompositeVideoClip([video_reel, txt_clip])
 
         output_name = f"{modele_nom}_Reel_{i+1}_variant.mp4"
 
-        # Métadonnées 100% uniques : timestamp + ID aléatoire + durée différente = fingerprint unique
+        # Métadonnées 100% uniques par variante
         gen_id = random.randint(100000, 999999)
         timestamp_unique = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         clean_params = [
@@ -178,16 +183,14 @@ def lancer_production_serie(chemin_video, chemin_captions, dossier_sortie, n_to_
             ffmpeg_params=clean_params
         )
 
-        # Nettoyage mémoire
+        # Nettoyage mémoire complet à chaque variante
         final.close()
         video_reel.close()
         txt_clip.close()
-        del final, video_reel, txt_clip
+        clip_base.close()
+        del final, video_reel, txt_clip, clip_base
 
         reels_reussis += 1
 
         if progress_bar:
             progress_bar.progress(reels_reussis / n_to_make)
-
-    clip_base.close()
-    del clip_base
